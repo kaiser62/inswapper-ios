@@ -51,6 +51,29 @@ Each mode is an independent, user-selectable option in a player mode picker; non
 - Task: verify the effect on the test images in Python before building (1 vs 2 passes, alpha blend).
 - LICENCE: `kaiser62/visoswap` is GPL-3.0. Do NOT copy its code into this public repo; the strength idea is reimplemented here from the description above only.
 
+## Task 2.0 RESULTS (2026-11-23, Python reference on the two Mixkit stock clips + test photo; `tools/exp_phase2.py`)
+**Mode C re-warp** (face-region PSNR vs swapping EVERY frame, in-between frames only, mean / p10; raw unswapped is the floor):
+| N | landscape clip C | B (stale M) | portrait clip C | B (stale M) |
+|---|---|---|---|---|
+| 2 | 37.1 / 33.2 | 36.8 / 34.4 | 31.4 / 25.9 | 28.7 / 24.7 |
+| 4 | 34.2 / 28.7 | 33.2 / 28.7 | 28.4 / 23.1 | 25.2 / 20.0 |
+| 6 | 32.0 / 27.2 | 31.0 / 25.8 | 26.4 / 20.8 | 22.8 / 17.6 |
+| raw | 23.9 | | 27.9 | |
+- 24 fps video at the measured ~6.5 swaps/s means N=4 is the realistic sustained setting. C beats B by ~1 dB on a near-static head and ~3 dB with head motion. On the portrait clip the raw frame scores higher than C at N>=4 by this metric: PSNR is a weak proxy and re-warp cannot reproduce mouth/eye motion between swaps.
+- Visual (worst-frame contact sheets): head pose/position are right, but mouth and eye state lag by up to N-1 frames (open vs closed mouth on speech). Acceptable for slow/neutral clips, visibly laggy on fast speech.
+- **Verdict: Mode C passes the gate as an EXPERIMENTAL, opt-in mode** (N default 4, user-adjustable, labelled 'expression lag'). It is cheap to build once the compositor exists (same patch, fresh M).
+
+**Strength** (7 targets: test photo + 3 frames per clip; identity = ArcFace cos of the 112 crop vs the source; drift = mean landmark shift / inter-eye distance on the re-detected result):
+| passes | identity cos | landmark drift |
+|---|---|---|
+| target (unswapped) | -0.02 | 0 |
+| 100 (1) | 0.918 | 0.035 |
+| 150 (blend .5) | 0.922 | 0.043 |
+| 200 (2) | 0.924 | 0.050 |
+| 300 (3) | 0.924 | 0.063 |
+- ArcFace identity is already saturated after 1 pass; extra passes add ~0.003 cos but 40-80% more landmark drift (expression/geometry shifts toward the source), each costing +150 ms/frame. Visually (sheet_strength.png) extra passes make brows/eyes slightly more source-like and sharper. Residual artefacts (ghost beard edge on the bearded clip) come from the swapper, not the pass count and are not fixed by strength.
+- **Decision: keep Strength as an optional Mode A / export setting (default 1 pass), cost shown; value is subtle, not a headline feature.**
+
 ## Seek behaviour
 - On seek: cancel in-flight work, flush tracker, show the raw frame immediately, then continue in the selected mode (B: swap resumes at once; A: render restarts from the new position, optionally with B filling in if the combo is on; C: re-detect and warp).
 - Scrubbing: raw frames while dragging; swap on release.
@@ -60,7 +83,7 @@ Each mode is an independent, user-selectable option in a player mode picker; non
 - Keep screen awake while rendering; handle backgrounding (iOS suspends: pause render, resume on return).
 
 ## Tasks (advisor check after each)
-2.0 Offline experiment: Mode C quality (needs a short clip) and strength 1 vs 2 passes on test images.
+2.0 DONE (see results above): Mode C passes as experimental opt-in; strength kept optional.
 2.1 Pipeline core in Swift: DONE in Phase 1 step 1.1 (`app/Core`, verified vs golden on Mac). Remaining here: Metal compositor (same analytic mask math as `Compositor.swift`), patch cache, tracker.
 2.2 Mode picker UI + Mode B player (AVPlayer + display from cache); each mode selectable separately.
 2.3 Mode A background renderer + ranges UI + seek handling.
