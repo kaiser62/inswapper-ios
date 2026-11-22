@@ -29,6 +29,16 @@ enum PixelBuf {
     /// Decode an image file (applies EXIF orientation), optionally limiting the longest side.
     static func load(url: URL, maxSide: Int = 4096) throws -> CVPixelBuffer {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { throw ImagingError.decode }
+        return try load(source: src, maxSide: maxSide)
+    }
+
+    /// Same, from encoded bytes (e.g. PhotosPicker data). Never go through UIImage.cgImage: it drops EXIF rotation.
+    static func load(data: Data, maxSide: Int = 4096) throws -> CVPixelBuffer {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { throw ImagingError.decode }
+        return try load(source: src, maxSide: maxSide)
+    }
+
+    private static func load(source src: CGImageSource, maxSide: Int) throws -> CVPixelBuffer {
         let opts: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,

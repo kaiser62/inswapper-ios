@@ -13,6 +13,15 @@ for n in ["scrfd", "arcface", "swapper"] where !FileManager.default.fileExists(a
 try? FileManager.default.removeItem(at: compiled.appendingPathComponent("emap.bin"))
 try FileManager.default.copyItem(at: root.appendingPathComponent("emap.bin"), to: compiled.appendingPathComponent("emap.bin"))
 
+if CommandLine.arguments.count > 2 {  // extra mode: print detection landmarks for given images
+    let pipe = try FacePipeline(modelsDirectory: compiled)
+    for a in CommandLine.arguments.dropFirst(2) {
+        let img = try PixelBuf.load(url: URL(fileURLWithPath: a))
+        let f = try pipe.detect(img).max { $0.area < $1.area }!
+        print(URL(fileURLWithPath: a).lastPathComponent, PixelBuf.size(img), f.landmarks.flatMap { [$0.x, $0.y] }.map { String(format: "%.3f", $0) }.joined(separator: " "))
+    }
+    exit(0)
+}
 let g = try JSONSerialization.jsonObject(with: Data(contentsOf: test.appendingPathComponent("golden/golden.json"))) as! [String: [Double]]
 func maxDiff(_ a: [Double], _ b: [Double]) -> Double { zip(a, b).map { abs($0 - $1) }.max()! }
 

@@ -61,7 +61,7 @@ Each mode is an independent, user-selectable option in a player mode picker; non
 
 ## Tasks (advisor check after each)
 2.0 Offline experiment: Mode C quality (needs a short clip) and strength 1 vs 2 passes on test images.
-2.1 Pipeline core in Swift (reuse Phase 1) with golden-tensor tests against `tools/models/test/golden.npz` (local only).
+2.1 Pipeline core in Swift: DONE in Phase 1 step 1.1 (`app/Core`, verified vs golden on Mac). Remaining here: Metal compositor (same analytic mask math as `Compositor.swift`), patch cache, tracker.
 2.2 Mode picker UI + Mode B player (AVPlayer + display from cache); each mode selectable separately.
 2.3 Mode A background renderer + ranges UI + seek handling.
 2.4 Mode C if 2.0 says it is worth it.

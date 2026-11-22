@@ -1,11 +1,11 @@
 # Progress tracker
 
-Last updated: 2026-11-23. Status: planning complete, no code written.
+Last updated: 2026-11-23. Status: Phase 0 done; Phase 1 in progress (core verified on Mac, app UI built via CI, awaiting on-device test).
 
 | Phase | Spec | Status | Notes |
 |---|---|---|---|
 | 0 Spike (convert + benchmark + CI) | 01-phase0-spike.md | DONE (verdict: NO-GO for video-rate live; project continues with reworked Phase 2) | swapper 150 ms, 6.6 fps |
-| 1 Photo swap | 02-phase1-photo.md | not started | |
+| 1 Photo swap | 02-phase1-photo.md | IN PROGRESS: core + Photo tab written; awaiting CI + device test | Swift core `app/Core` verified vs Python on Mac |
 | 2 Video player + seeking | 03-phase2-video-player.md | spec REWRITTEN, not started | modes A (background render) + B (reduced-rate live) + C (re-warp, experimental) |
 | 3 Export | 04-phase3-export.md | not started | |
 | 4 Polish | 05-phase4-polish.md | not started | |
@@ -14,7 +14,7 @@ Last updated: 2026-11-23. Status: planning complete, no code written.
 After every step, consult the advisor to check the work; log its verdict below.
 
 ## Note
-`ios-dev/` is not under git yet. When the GitHub repo exists, move/commit `specs/` into it. Until then this folder is the source of truth.
+This folder is the git repo kaiser62/inswapper-ios (public). Face data and weights are gitignored.
 
 ## Open items before Phase 0
 - [ ] User says "go"

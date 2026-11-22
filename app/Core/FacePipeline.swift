@@ -23,6 +23,14 @@ final class FacePipeline {
     let scrfd: MLModel, arcface: MLModel, swapper: MLModel
     let emap: [Float]  // 512x512 row-major
     private let latentShape: [NSNumber]
+    /// Accumulated per-stage wall time in ms (reset with `resetTimings`). Shown in the app to measure the Swift CPU cost.
+    private(set) var timings: [String: Double] = [:]
+    func resetTimings() { timings = [:] }
+    func addTiming(_ k: String, _ ms: Double) { timings[k, default: 0] += ms }
+    private func timed<T>(_ k: String, _ f: () throws -> T) rethrows -> T {
+        let t = Date(); defer { timings[k, default: 0] += Date().timeIntervalSince(t) * 1000 }
+        return try f()
+    }
 
     init(modelsDirectory dir: URL, computeUnits: MLComputeUnits = .cpuAndNeuralEngine) throws {
         let cfg = MLModelConfiguration(); cfg.computeUnits = computeUnits
@@ -36,8 +44,9 @@ final class FacePipeline {
 
     // MARK: detection (SCRFD buffalo_l det_10g, fixed 640x640)
     func detect(_ frame: CVPixelBuffer, threshold: Float = 0.5) throws -> [DetectedFace] {
-        let (canvas, scale) = try PixelBuf.letterbox(frame)
-        let out = try scrfd.prediction(from: MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: canvas)]))
+        let (canvas, scale) = try timed("letterbox") { try PixelBuf.letterbox(frame) }
+        let out = try timed("scrfd") { try scrfd.prediction(from: MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: canvas)])) }
+        let tDecode = Date(); defer { timings["decode+nms", default: 0] += Date().timeIntervalSince(tDecode) * 1000 }
         func arr(_ n: String) throws -> [Float] {
             guard let a = out.featureValue(for: n)?.multiArrayValue else { throw PipelineError.badModel("missing output " + n) }
             return a.toFloats()
@@ -83,8 +92,8 @@ final class FacePipeline {
     /// latent = L2norm( L2norm(arcface(aligned112)) @ emap ), computed once per source face.
     func latent(forSource frame: CVPixelBuffer, face: DetectedFace) throws -> [Float] {
         let M = FaceAlign.estimate(landmarks: face.landmarks, size: 112)
-        let crop = try PixelBuf.warp(frame, M: M, size: 112)
-        let out = try arcface.prediction(from: MLDictionaryFeatureProvider(dictionary: ["face": MLFeatureValue(pixelBuffer: crop)]))
+        let crop = try timed("warp") { try PixelBuf.warp(frame, M: M, size: 112) }
+        let out = try timed("arcface") { try arcface.prediction(from: MLDictionaryFeatureProvider(dictionary: ["face": MLFeatureValue(pixelBuffer: crop)])) }
         guard var e = out.featureValue(for: "embedding")?.multiArrayValue?.toFloats(), e.count == 512
         else { throw PipelineError.badModel("embedding") }
         let n0 = e.reduce(0) { $0 + $1 * $1 }.squareRoot()
@@ -98,11 +107,11 @@ final class FacePipeline {
     // MARK: swap
     func swap(frame: CVPixelBuffer, face: DetectedFace, latent: [Float]) throws -> SwapPatch {
         let M = FaceAlign.estimate(landmarks: face.landmarks, size: 128)
-        let crop = try PixelBuf.warp(frame, M: M, size: 128)
+        let crop = try timed("warp") { try PixelBuf.warp(frame, M: M, size: 128) }
         let lat = try MLMultiArray(shape: latentShape, dataType: .float32)
         for i in 0..<512 { lat[i] = NSNumber(value: latent[i]) }
-        let out = try swapper.prediction(from: MLDictionaryFeatureProvider(dictionary: [
-            "target": MLFeatureValue(pixelBuffer: crop), "latent": MLFeatureValue(multiArray: lat)]))
+        let out = try timed("swapper") { try swapper.prediction(from: MLDictionaryFeatureProvider(dictionary: [
+            "target": MLFeatureValue(pixelBuffer: crop), "latent": MLFeatureValue(multiArray: lat)])) }
         guard let p = out.featureValue(for: "swapped")?.multiArrayValue?.toFloats(), p.count == 3 * 128 * 128
         else { throw PipelineError.badModel("swapped") }
         var bgr = [UInt8](repeating: 0, count: 128 * 128 * 3)

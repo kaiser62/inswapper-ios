@@ -2,10 +2,22 @@ name: build-ios
 on:
   push:
     branches: [main]
-    paths: ["app/**", ".github/workflows/build-ios.yml"]
+    paths: ["app/**", "tools/ci-tests/**", ".github/workflows/build-ios.yml"]
   workflow_dispatch: {}
 
 jobs:
+  core-tests:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+      - name: Synthetic unit tests (no face data, no models)
+        run: |
+          mkdir -p build
+          swiftc -O app/Core/*.swift tools/ci-tests/main.swift -o build/coretests
+          build/coretests
+
   build:
     runs-on: macos-15
     steps:

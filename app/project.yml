@@ -14,12 +14,14 @@ targets:
     platform: iOS
     sources:
       - path: InSwapBench
+      - path: Core
     dependencies:
       - package: ZIPFoundation
     info:
       path: InSwapBench/Info.plist
       properties:
-        CFBundleDisplayName: InSwapBench
+        CFBundleDisplayName: InSwap
+        NSPhotoLibraryAddUsageDescription: Save swapped photos to your library.
         UILaunchScreen: {}
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true

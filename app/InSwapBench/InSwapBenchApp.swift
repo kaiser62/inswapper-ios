@@ -4,7 +4,12 @@ import UniformTypeIdentifiers
 @main
 struct InSwapBenchApp: App {
     var body: some Scene {
-        WindowGroup { ContentView() }
+        WindowGroup {
+            TabView {
+                PhotoView().tabItem { Label("Photo", systemImage: "face.smiling") }
+                ContentView().tabItem { Label("Models & Bench", systemImage: "gauge") }
+            }
+        }
     }
 }
 
