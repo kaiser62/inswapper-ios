@@ -22,9 +22,22 @@ ARCFACE_DST = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.736
 
 
 def similarity(src, dst):
-    """Least-squares similarity transform (as skimage SimilarityTransform.estimate) -> 2x3."""
-    M, _ = cv2.estimateAffinePartial2D(src, dst, method=cv2.LMEDS)
-    # estimateAffinePartial2D is similarity (4 DOF); LMEDS with 5 points is stable
+    """Least-squares similarity transform (Umeyama) -> 2x3. Matches skimage SimilarityTransform.estimate
+    (insightface) to ~1e-13 (verified on 200 noisy random cases); Phase 1 Swift code must implement this."""
+    src = np.asarray(src, np.float64); dst = np.asarray(dst, np.float64)
+    n = len(src)
+    ms, md = src.mean(0), dst.mean(0)
+    sc, dc = src - ms, dst - md
+    var = (sc ** 2).sum() / n
+    U, D, Vt = np.linalg.svd(dc.T @ sc / n)
+    S = np.eye(2)
+    if np.linalg.det(U) * np.linalg.det(Vt) < 0:
+        S[1, 1] = -1
+    R = U @ S @ Vt
+    s = (D * np.diag(S)).sum() / var
+    M = np.zeros((2, 3))
+    M[:, :2] = s * R
+    M[:, 2] = md - s * R @ ms
     return M
 
 
