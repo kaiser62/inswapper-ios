@@ -47,6 +47,7 @@ Measured: swapper 150 ms (ANE), detector 5 ms, embedder 4 ms, sustained ~6.6 fps
 2. `03-phase2-video-player.md`
 3. `04-phase3-export.md`
 4. `05-phase4-polish.md`
+5. `06-face-library-and-url-ingest.md`: face library (saved source identities) + video from a pasted direct MP4 URL (requested 2026-11-23, planned, not started)
 
 Progress is tracked in `PROGRESS.md`.
 
