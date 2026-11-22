@@ -12,29 +12,32 @@ func halfToFloat(_ h: UInt16) -> Float {
 }
 
 extension MLMultiArray {
-    /// Logical (C-order) contents as Float, handling float16/float32 and padded strides.
+    /// Logical (C-order) contents as Float. Handles float16/float32 and padded strides (the Neural Engine pads output
+    /// strides, which made the old per-element NSNumber path cost ~50 ms per detection on device).
     func toFloats() -> [Float] {
         let n = count
         var out = [Float](repeating: 0, count: n)
-        var expected = 1, contiguous = true
-        for i in stride(from: shape.count - 1, through: 0, by: -1) {
-            if strides[i].intValue != expected { contiguous = false }
-            expected *= shape[i].intValue
+        guard dataType == .float32 || dataType == .float16 else {
+            for i in 0..<n { out[i] = self[i].floatValue }
+            return out
         }
-        if contiguous {
-            switch dataType {
-            case .float32:
-                let p = dataPointer.bindMemory(to: Float.self, capacity: n)
-                for i in 0..<n { out[i] = p[i] }
-                return out
-            case .float16:
-                let p = dataPointer.bindMemory(to: UInt16.self, capacity: n)
-                for i in 0..<n { out[i] = halfToFloat(p[i]) }
-                return out
-            default: break
+        let dims = shape.map { $0.intValue }, st = strides.map { $0.intValue }
+        let nd = dims.count
+        let is16 = dataType == .float16
+        let p32 = dataPointer.assumingMemoryBound(to: Float.self)
+        let p16 = dataPointer.assumingMemoryBound(to: UInt16.self)
+        @inline(__always) func at(_ o: Int) -> Float { is16 ? halfToFloat(p16[o]) : p32[o] }
+        var idx = [Int](repeating: 0, count: nd)
+        var off = 0
+        for i in 0..<n {
+            out[i] = at(off)
+            var d = nd - 1  // odometer increment, last dim fastest
+            while d >= 0 {
+                idx[d] += 1; off += st[d]
+                if idx[d] < dims[d] { break }
+                off -= idx[d] * st[d]; idx[d] = 0; d -= 1
             }
         }
-        for i in 0..<n { out[i] = self[i].floatValue }
         return out
     }
 }

@@ -78,5 +78,16 @@ PixelBuf.withBytes(comp) { b, _, _, bpr in
 }
 check(true, "(target buffer not mutated)"); PixelBuf.withBytes(target) { b, _, _, bpr in check(b[114 * bpr + 114 * 4 + 1] == 100, "composite returns a new buffer") }
 
+// strided MLMultiArray read (padded rows, like the Neural Engine output)
+import CoreML
+let padded = UnsafeMutablePointer<Float>.allocate(capacity: 2 * 4)
+for r in 0..<2 { for c in 0..<4 { padded[r * 4 + c] = c < 3 ? Float(r * 10 + c) : -999 } }
+let ma = try! MLMultiArray(dataPointer: padded, shape: [2, 3], dataType: .float32, strides: [4, 1])
+check(ma.toFloats() == [0, 1, 2, 10, 11, 12], "toFloats honours padded strides")
+let h16 = UnsafeMutablePointer<UInt16>.allocate(capacity: 2 * 2 * 4)
+for i in 0..<16 { h16[i] = 0x3C00 }  // 1.0
+let mb = try! MLMultiArray(dataPointer: h16, shape: [1, 2, 3], dataType: .float16, strides: [8, 4, 1])
+check(mb.toFloats() == [Float](repeating: 1, count: 6), "toFloats float16 3-D strided")
+
 print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)
