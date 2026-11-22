@@ -33,9 +33,18 @@ After every step, consult the advisor to check the work; log its verdict below.
 ## Benchmark results (fill in after Phase 0)
 | Model | Mean ms | p95 ms | Compute unit |
 |---|---|---|---|
-| SCRFD detector | | | |
-| ArcFace | | | |
-| inswapper | | | |
+| SCRFD detector | 5.1 | 6.0 | ANE (plan: 137 ANE / 3 CPU) |
+| ArcFace | 3.8 | 4.1 | ANE (132 ANE / 3 CPU) |
+| inswapper | 150.4 | 151.8 | ANE (239 ANE / 2 CPU) |
+
+## Device results: iPhone 14 Pro, iOS 27.0.1, installed in patched LiveContainer (run 1; mean ms / p95)
+| Model | cpuAndNeuralEngine | cpuAndGPU | all | cpuOnly |
+|---|---|---|---|---|
+| scrfd | 5.1 / 6.0 | 50.0 / 82.4 | 5.4 / 6.9 | 25.0 / 26.8 |
+| arcface | 3.8 / 4.1 | 37.3 / 47.5 | 3.7 / 4.1 | 13.9 / 15.3 |
+| swapper | 150.4 / 151.8 | 437.0 / 471.7 | 149.1 / 150.7 | 320.8 / 413.5 |
+Sustained 60 s (scrfd + swapper every frame, ANE): 6.6 fps flat, thermal nominal throughout. First-run load+warmup 1007 ms. LiveContainer: file import, unzip, on-device compile and Core ML all WORK.
+**Verdict vs pre-written criteria: NO-GO as designed for video-rate live swapping.** Swapper 150 ms (needed <= ~40, rethink threshold ~100), sustained 6.6 fps (needed >= 10). Placement criterion passed (239/241 ops ANE) but that is NOT the bottleneck: ANE is only ~2x faster than CPU (321 ms) and GPU is slower (437 ms). Detector + embedder are cheap (4-5 ms), so everything hinges on the swapper. Real-face parity (test images in tools/models/test, gitignored): kps diff <0.3 px, ArcFace cosine 0.99975, swapper PSNR vs ONNX 45.9 dB, output visually sane.
 
 ## Log
 - 2026-11-23: Plan agreed. Decisions: Core ML, video playback with live swap and seek (no live camera), GitHub Actions build on a public repo, SideStore install, models imported via the Files app.
