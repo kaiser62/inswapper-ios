@@ -1,8 +1,16 @@
 # Phase 2: Video player with swapping (REWRITTEN 2026-11-23 after device benchmark)
 
-**Why rewritten:** measured swapper = 150 ms/frame on iPhone 14 Pro (~6.5 swaps/s). Video-rate (24-30 fps) live swapping is not achievable with inswapper_128. User chose to COMBINE three modes (see below).
+**Why rewritten:** measured swapper = 150 ms/frame on iPhone 14 Pro (~6.5 swaps/s). Video-rate (24-30 fps) live swapping is not achievable with inswapper_128. User wants three modes, each SELECTABLE on its own (a mode picker), and also usable together where it makes sense (see below).
 
 **Goal:** open a video, play and seek anywhere, and get swapped faces as fast as the phone allows, with honest feedback about what is ready.
+
+## Mode selection (user request 2026-11-23)
+Each mode is an independent, user-selectable option in a player mode picker; none requires another to work. The picker shows each mode's trade-off (smoothness vs wait vs expression accuracy) and the current measured swap rate.
+- **A: Background render** works standalone: when selected, un-rendered ranges show the RAW video (no swapping) with a "rendering..." indicator instead of falling back to B.
+- **B: Reduced-rate live preview** works standalone: no cache needed beyond the last swapped frame.
+- **C: Re-warp (Nth-frame swap)** works standalone once built (still gated by task 2.0).
+- Optional combo toggle: "A + B fallback" (A with B filling un-rendered ranges), off by default; the user picks.
+- The chosen mode and its options persist per video; switching modes mid-playback keeps the position and any already-rendered cache.
 
 ## Shared architecture
 - `AVPlayer` = audio + clock master. Display from a swap cache keyed by presentation timestamp (PTS), rendered with `MTKView` / `AVSampleBufferDisplayLayer`.
@@ -14,7 +22,7 @@
 ## Mode A: Background render from the playhead (PRIMARY, recommended)
 - Seek anywhere: swapping starts at that point and runs ahead, every frame, full quality.
 - Scrubber shows rendered ranges like a buffering bar. Rendered ranges play smooth and fully swapped. Cached frames persist and are reused (re-seeking into a rendered range is instant).
-- Un-rendered ranges fall back to Mode B so playback never stalls.
+- Standalone behaviour: un-rendered ranges play the raw video with a "rendering..." indicator (or Mode B if the user enabled the optional A+B combo).
 - Cost: about (video fps / 6.5) x real time, i.e. roughly 3.5-5 min of processing per minute of 24-30 fps video, per face, per swap pass.
 - Pause/resume, cancel, and thermal-aware throttling (`ProcessInfo.thermalState`).
 
@@ -33,7 +41,7 @@
 - Task: verify the effect on the test images in Python before building (1 vs 2 passes, alpha blend).
 
 ## Seek behaviour
-- On seek: cancel in-flight work, flush tracker, show the raw frame immediately, resume Mode B at once and start Mode A from the new position.
+- On seek: cancel in-flight work, flush tracker, show the raw frame immediately, then continue in the selected mode (B: swap resumes at once; A: render restarts from the new position, optionally with B filling in if the combo is on; C: re-detect and warp).
 - Scrubbing: raw frames while dragging; swap on release.
 
 ## Other
@@ -43,7 +51,7 @@
 ## Tasks (advisor check after each)
 2.0 Offline experiment: Mode C quality (needs a short clip) and strength 1 vs 2 passes on test images.
 2.1 Pipeline core in Swift (reuse Phase 1) with golden-tensor tests against `tools/models/test/golden.npz` (local only).
-2.2 Mode B player (AVPlayer + display from cache).
+2.2 Mode picker UI + Mode B player (AVPlayer + display from cache); each mode selectable separately.
 2.3 Mode A background renderer + ranges UI + seek handling.
 2.4 Mode C if 2.0 says it is worth it.
 2.5 Strength option for Mode A.
