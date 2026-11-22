@@ -8,7 +8,7 @@ private struct Box<T>: @unchecked Sendable { let v: T }
 /// One target photo in the batch: its detected faces (largest first), which are selected, and the swapped result.
 struct PhotoJob: Identifiable {
     let id = UUID()
-    var buf: CVPixelBuffer
+    var data: Data                      // encoded original; decoded at swap time (keeps memory flat)
     var width: Int, height: Int
     var preview: CGImage               // downscaled target for the UI / face boxes
     var faces: [DetectedFace]          // sorted largest first
@@ -90,32 +90,41 @@ final class PhotoVM: ObservableObject {
     }
 
     // MARK: targets (batch)
-    func setTargets(_ datas: [Data]) {
-        guard !busy, !datas.isEmpty else { return }
-        busy = true; jobs = []
+    func setTargets(_ datas: [Data], unreadable: Int = 0) {
+        guard !datas.isEmpty else { status = "None of the selected photos could be read."; return }
+        guard !busy else { status = "Busy: try the selection again in a moment."; return }
+        busy = true
+        for j in jobs { if let u = j.resultURL { try? FileManager.default.removeItem(at: u) } }
+        jobs = []
         Task {
             defer { busy = false }
             do {
                 let p = try await pipeline()
                 var out: [PhotoJob] = []
+                var failed = unreadable
                 for (n, data) in datas.enumerated() {
                     status = "Detecting faces \(n + 1)/\(datas.count)…"
-                    let box = try await Task.detached(priority: .userInitiated) { () -> Box<PhotoJob> in
-                        let tl = Date()
-                        let buf = try PixelBuf.load(data: data)
-                        let loadMs = Date().timeIntervalSince(tl) * 1000
-                        p.resetTimings(); p.addTiming("decode-image", loadMs)
-                        let faces = try p.detect(buf).sorted { $0.area > $1.area }
-                        let (w, h) = PixelBuf.size(buf)
-                        let prev = ImageFile.cgImage(data: data, maxSide: 1600) ?? PixelBuf.cgImage(from: buf)!
-                        return Box(v: PhotoJob(buf: buf, width: w, height: h, preview: prev, faces: faces,
-                                               selected: faces.isEmpty ? [] : [0], note: faces.isEmpty ? "no face" : ""))
-                    }.value
-                    out.append(box.v)
-                    timings += stage(p, "photo \(n + 1) \(box.v.width)x\(box.v.height) faces \(box.v.faces.count)")
-                    jobs = out
+                    do {
+                        let box = try await Task.detached(priority: .userInitiated) { () -> Box<PhotoJob> in
+                            let tl = Date()
+                            let buf = try PixelBuf.load(data: data)
+                            let loadMs = Date().timeIntervalSince(tl) * 1000
+                            p.resetTimings(); p.addTiming("decode-image", loadMs)
+                            let faces = try p.detect(buf).sorted { $0.area > $1.area }
+                            let (w, h) = PixelBuf.size(buf)
+                            let prev = ImageFile.cgImage(data: data, maxSide: 1600) ?? PixelBuf.cgImage(from: buf)!
+                            return Box(v: PhotoJob(data: data, width: w, height: h, preview: prev, faces: faces,
+                                                   selected: faces.isEmpty ? [] : [0], note: faces.isEmpty ? "no face" : ""))
+                        }.value
+                        out.append(box.v)
+                        timings += stage(p, "photo \(n + 1) \(box.v.width)x\(box.v.height) faces \(box.v.faces.count)")
+                        jobs = out
+                    } catch {
+                        failed += 1
+                        timings += "photo \(n + 1): failed (\(error.localizedDescription))\n"
+                    }
                 }
-                status = "\(out.count) photo(s) ready. Largest face selected in each; tap Swap all, then edit faces from the full-screen view."
+                status = "\(out.count) photo(s) ready" + (failed > 0 ? ", \(failed) could not be read" : "") + ". Largest face selected in each; tap Swap all, then edit faces from the full-screen view."
             } catch {
                 status = "Target failed: \(error.localizedDescription)"
             }
@@ -147,20 +156,25 @@ final class PhotoVM: ObservableObject {
         guard let p = pipe, let lat = latent else { return }
         let job = jobs[i]
         let faces = job.selected.sorted().map { job.faces[$0] }
-        let jb = Box(v: job.buf), fb = Box(v: faces)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("swapped-\(job.id.uuidString.prefix(8))-\(Int(Date().timeIntervalSince1970 * 1000)).png")
+        let fb = Box(v: faces), data = job.data
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("swapped-\(job.id.uuidString.prefix(8))-\(Int(Date().timeIntervalSince1970 * 1000)).jpg")
         let t0 = Date()
         do {
             let thumb = try await Task.detached(priority: .userInitiated) { () -> Box<CGImage?> in
-                p.resetTimings()
-                let patches = try fb.v.map { try p.swap(frame: jb.v, face: $0, latent: lat) }
+                let td = Date()
+                let frame = try PixelBuf.load(data: data)
+                p.resetTimings(); p.addTiming("decode-image", Date().timeIntervalSince(td) * 1000)
+                let patches = try fb.v.map { try p.swap(frame: frame, face: $0, latent: lat) }
                 let tc = Date()
-                let out = try Compositor.composite(jb.v, patches: patches)
+                let out = try Compositor.composite(frame, patches: patches)
                 p.addTiming("composite", Date().timeIntervalSince(tc) * 1000)
-                let tp = Date()
-                try PixelBuf.writePNG(out, to: url)
-                p.addTiming("png", Date().timeIntervalSince(tp) * 1000)
-                return Box(v: ImageFile.cgImage(url: url, maxSide: 400))
+                let te = Date()
+                try PixelBuf.writeJPEG(out, to: url, quality: 0.95)
+                p.addTiming("encode", Date().timeIntervalSince(te) * 1000)
+                let tt = Date()
+                let th = ImageFile.cgImage(url: url, maxSide: 400)
+                p.addTiming("thumb", Date().timeIntervalSince(tt) * 1000)
+                return Box(v: th)
             }.value
             if let old = jobs[i].resultURL { try? FileManager.default.removeItem(at: old) }
             jobs[i].resultURL = url; jobs[i].thumb = thumb.v; jobs[i].note = ""
@@ -253,11 +267,12 @@ struct PhotoView: View {
         }
         .onChange(of: tgtItems) { _, items in
             guard !items.isEmpty else { return }
+            vm.status = "Loading \(items.count) photo(s)…"
             Task {
                 var datas: [Data] = []
                 for it in items { if let d = try? await it.loadTransferable(type: Data.self) { datas.append(d) } }
                 tgtItems = []   // so picking the same photos again fires onChange
-                vm.setTargets(datas)
+                vm.setTargets(datas, unreadable: items.count - datas.count)
             }
         }
     }

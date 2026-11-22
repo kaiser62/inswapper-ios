@@ -78,6 +78,14 @@ enum PixelBuf {
         guard CGImageDestinationFinalize(dest) else { throw ImagingError.decode }
     }
 
+    static func writeJPEG(_ pb: CVPixelBuffer, to url: URL, quality: Double = 0.95) throws {
+        guard let cg = cgImage(from: pb),
+              let dest = CGImageDestinationCreateWithURL(url as CFURL, "public.jpeg" as CFString, 1, nil)
+        else { throw ImagingError.decode }
+        CGImageDestinationAddImage(dest, cg, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { throw ImagingError.decode }
+    }
+
     /// Like cv2.warpAffine(src, M, (size, size)) with INTER_LINEAR and constant-0 border: `M` maps src -> dst.
     static func warp(_ src: CVPixelBuffer, M: Affine, size: Int) throws -> CVPixelBuffer {
         let dst = try make(width: size, height: size)
