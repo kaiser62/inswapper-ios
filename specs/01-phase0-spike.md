@@ -12,7 +12,8 @@
    - recognizer (ArcFace 112x112)
    Check each against insightface `model_zoo/inswapper.py`, `arcface_onnx.py`, `scrfd.py`:
    - Normalisation: swapper target RGB x/255, output RGB 0-1; ArcFace (x-127.5)/127.5 on 112px aligned face; SCRFD (x-127.5)/128.
-   - Alignment template: swapper uses the ArcFace 5-pt template scaled to 128 (not the 112 one).
+   - Alignment template (verified in insightface `face_align.estimate_norm`): for a 128px crop, ratio = 1.0 and x is shifted +8 px, i.e. the 112 ArcFace template, NOT enlarged: dst = [[38.2946,51.6963],[73.5318,51.5014],[56.0252,71.7366],[41.5493,92.3655],[70.7299,92.2041]] with x += 8. ArcFace itself uses the unshifted 112 template. Similarity transform (not full affine).
+   - Verified swapper I/O (insightface `inswapper.py`): `emap` = `graph.initializer[-1]`; input 0 = target blob (RGB, x/255, mean 0), input 1 = latent (1x512); output RGB 0-1, 1x3x128x128 (multiply by 255, clip). Paste-back mask logic (erode/blur/diff mask) is in `get()`: copy it in Phase 1. ArcFace: RGB, (x-127.5)/127.5.
    - Package: zip all `.mlpackage` + `emap.bin` into `models.zip` for delivery (AirDrop / iCloud Drive -> Files).
 5. Verify each against onnxruntime on test images (max abs diff within FP16 tolerance, visual check).
 6. Minimal SwiftUI benchmark app: import `models.zip` via Files (ZIPFoundation via SPM), compile on device, run each model N=100 times on a fixed input, report mean/p95 ms. Compute units: Core ML doesn't expose this directly, so use `MLComputePlan` (iOS 17.4+, per-op device) and also time each model under `.cpuOnly`, `.cpuAndGPU`, `.cpuAndNeuralEngine`. Also read `ProcessInfo.thermalState`.
