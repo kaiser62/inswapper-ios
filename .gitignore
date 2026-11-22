@@ -9,3 +9,4 @@ emap.bin
 app/InSwapBench/Info.plist
 build/
 DerivedData/
+*.ipa
