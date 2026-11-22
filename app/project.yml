@@ -21,6 +21,7 @@ targets:
       path: InSwapBench/Info.plist
       properties:
         CFBundleDisplayName: InSwap
+        CFBundleVersion: "${GITHUB_RUN_NUMBER}"
         NSPhotoLibraryAddUsageDescription: Save swapped photos to your library.
         UILaunchScreen: {}
         UIFileSharingEnabled: true
@@ -33,4 +34,4 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1"
         MARKETING_VERSION: "0.1"
-        CURRENT_PROJECT_VERSION: "1"
+        CURRENT_PROJECT_VERSION: "${GITHUB_RUN_NUMBER}"
