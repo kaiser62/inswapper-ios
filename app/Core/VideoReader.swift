@@ -41,7 +41,9 @@ final class VideoReader {
 
     var frameDurationUs: Int64 { Int64((frameDuration.seconds * 1_000_000).rounded()) }
 
-    /// Calls `handler(frame, ptsMicroseconds)` for each frame from `start` seconds on until it returns false or the video ends.
+    /// Calls `handler(frame, ptsMicroseconds)` for each real frame from the one covering `start` on, until it returns
+    /// false or the video ends. PTS values are always the source grid values: AVAssetReader stamps the first sample of a
+    /// timeRange with the range start (an off-grid duplicate), so we begin ~2 frames early and drop that sample.
     func read(from start: Double, handler: (CVPixelBuffer, Int64) throws -> Bool) throws {
         let reader = try AVAssetReader(asset: asset)
         let out = AVAssetReaderVideoCompositionOutput(videoTracks: [track], videoSettings: [
@@ -50,15 +52,34 @@ final class VideoReader {
         out.alwaysCopiesSampleData = false
         guard reader.canAdd(out) else { throw VideoError.readerFailed("cannot add output") }
         reader.add(out)
-        let s = CMTime(seconds: max(0, start), preferredTimescale: 600)
-        reader.timeRange = CMTimeRange(start: s, end: CMTime(seconds: duration, preferredTimescale: 600))
+        let fd = frameDurationUs, startUs = Int64((start * 1_000_000).rounded())
+        let readFrom = max(0, startUs - 2 * fd)
+        reader.timeRange = CMTimeRange(start: CMTime(value: readFrom, timescale: 1_000_000), end: CMTime(seconds: duration, preferredTimescale: 600))
         guard reader.startReading() else { throw VideoError.readerFailed(reader.error?.localizedDescription ?? "startReading") }
         defer { if reader.status == .reading { reader.cancelReading() } }
-        while let sb = out.copyNextSampleBuffer() {
-            guard let pb = CMSampleBufferGetImageBuffer(sb) else { continue }
-            let pts = CMSampleBufferGetPresentationTimeStamp(sb)
-            if try !handler(pb, Int64((pts.seconds * 1_000_000).rounded())) { break }
+        var first = true
+        var held: (CVPixelBuffer, Int64)?   // first sample, kept until the second shows whether it is the stamped duplicate
+        var go = true
+        func emit(_ pb: CVPixelBuffer, _ pts: Int64) throws {
+            if pts <= startUs - fd { return }  // before the frame that covers `start`
+            if try !handler(pb, pts) { go = false }
         }
+        while go, let sb = out.copyNextSampleBuffer() {
+            guard let pb = CMSampleBufferGetImageBuffer(sb) else { continue }
+            let pts = Int64((CMSampleBufferGetPresentationTimeStamp(sb).seconds * 1_000_000).rounded())
+            if first {
+                first = false
+                if readFrom == 0 { try emit(pb, pts) } else { held = (pb, pts) }   // at 0 the first sample is a real frame
+                continue
+            }
+            if let h = held {
+                held = nil
+                if pts - h.1 >= fd * 9 / 10 { try emit(h.0, h.1) }   // not a stamped duplicate (next frame is a full frame away)
+                if !go { break }
+            }
+            try emit(pb, pts)
+        }
+        if go, let h = held { try emit(h.0, h.1) }
         if reader.status == .failed { throw VideoError.readerFailed(reader.error?.localizedDescription ?? "failed") }
     }
 }
