@@ -81,12 +81,12 @@ enum Bench {
                     let warm = units == .cpuOnly ? 2 : 10
                     let runs = units == .cpuOnly ? 8 : 60
                     let tw = nowMs()
-                    for _ in 0..<warm { _ = try model.prediction(from: inp) }
+                    for _ in 0..<warm { _ = try await model.prediction(from: inp) }
                     let warmMs = nowMs() - tw
                     var t: [Double] = []
                     for _ in 0..<runs {
                         let a = nowMs()
-                        _ = try model.prediction(from: inp)
+                        _ = try await model.prediction(from: inp)
                         t.append(nowMs() - a)
                     }
                     let s = stats(t)
@@ -113,13 +113,13 @@ enum Bench {
             let det = try load("scrfd", .cpuAndNeuralEngine)
             let swp = try load("swapper", .cpuAndNeuralEngine)
             let di = try input(for: "scrfd"), si = try input(for: "swapper")
-            for _ in 0..<5 { _ = try det.prediction(from: di); _ = try swp.prediction(from: si) }
+            for _ in 0..<5 { _ = try await det.prediction(from: di); _ = try await swp.prediction(from: si) }
             let start = nowMs()
             var frames = 0, lastFrames = 0
             var lastLog = start
             while nowMs() - start < 60_000 {
-                _ = try det.prediction(from: di)
-                _ = try swp.prediction(from: si)
+                _ = try await det.prediction(from: di)
+                _ = try await swp.prediction(from: si)
                 frames += 1
                 let t = nowMs()
                 if t - lastLog >= 5_000 {
