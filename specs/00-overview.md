@@ -27,7 +27,9 @@ AVPlayer -> AVPlayerItemVideoOutput -> CADisplayLink pull
 Look-ahead: background queue swaps frames ahead of playhead into a ring cache.
 Seek: flush tracker + cache, fresh detect at new position.
 ```
-Source face: ArcFace embedding computed once per source photo, multiplied by `emap` (baked in at conversion), cached.
+**SUPERSEDED: the block above is the original design. The current architecture (patch+M cache, one Metal compositor, modes A/B/C) is in `03-phase2-video-player.md` "Shared architecture". Follow that.**
+
+Source face: ArcFace embedding computed once per source photo, then latent = L2norm(L2norm(emb) @ emap) in Swift (emap is NOT baked into the model; see Decisions), cached.
 
 ## Performance: MEASURED on iPhone 14 Pro, iOS 27.0.1, via patched LiveContainer (2026-11-23). The estimates below are SUPERSEDED.
 Measured: swapper 150 ms (ANE), detector 5 ms, embedder 4 ms, sustained ~6.6 fps with detect+swap every frame, thermal nominal. Swapper = 349 GFLOPs/frame (20 big 3x3 convs, 138.6M params) -> only ~2.3 TFLOPS effective. LiveContainer works for file import + on-device compile + Core ML. Video-rate (24-30 fps) live swapping is NOT achievable with inswapper_128 on this phone. See PROGRESS.md.

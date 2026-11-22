@@ -12,12 +12,17 @@ Each mode is an independent, user-selectable option in a player mode picker; non
 - Optional combo toggle: "A + B fallback" (A with B filling un-rendered ranges), off by default; the user picks.
 - The chosen mode and its options persist per video; switching modes mid-playback keeps the position and any already-rendered cache.
 
-## Shared architecture
-- `AVPlayer` = audio + clock master. Display from a swap cache keyed by presentation timestamp (PTS), rendered with `MTKView` / `AVSampleBufferDisplayLayer`.
-- A separate `AVAssetReader` decodes frames ahead of the playhead for the swap pipeline. It cannot seek: on every seek, cancel and recreate it with `timeRange` from the new position.
-- Per frame: letterbox -> SCRFD (5 ms) -> align (Umeyama, +8 template) -> swapper (150 ms) -> paste-back (Metal) -> cache. Source embedding + `emap` latent computed once per source face.
-- Pipeline code is frame-in/frame-out (`CVPixelBuffer`) and shared with Phase 1 (photo) and Phase 3 (export).
-- Memory: ring cache of swapped frames with a byte cap; evict behind the playhead.
+## Shared architecture (revised after advisor review 2026-11-23)
+- `AVPlayer` = audio + clock master. The display frame is always the RAW frame from `AVPlayerItemVideoOutput` at the playhead, composited on the GPU (`MTKView`) with a swapped face PATCH. The video itself never stutters; only the patch source differs per mode.
+- **Cache the patch, not the frame.** For each presentation timestamp (PTS) store: the 128x128 RGB swapped patch (~49 KB) + its 2x3 alignment matrix M (+ face id). ~88 MB per minute at 30 fps, so it can persist to disk per video. (Full swapped 1080p BGRA frames would be ~8.3 MB each, ~15 GB per minute: rejected.)
+- **One Metal compositor** (inverse-warp patch by M, feathered mask, blend onto the raw frame). The paste-back mask depends only on M and frame size (insightface's diff mask is computed and then discarded), so it is built in the shader: warped white square, eroded by `max(ms//10,10)`, blurred by `max(ms//20,5)`. The modes differ only in which patch/M they feed it:
+  - A: the patch cached for that exact PTS (with its own M).
+  - B: the latest available patch, pasted at that patch's own M.
+  - C: the latest patch pasted with the CURRENT frame's M (fresh detection each frame). A canonical-coordinate patch + fresh M is exactly the re-warp.
+- A separate `AVAssetReader` decodes frames for the swap worker. It cannot seek: on every seek, cancel and recreate it with `timeRange` from the new position.
+- Per swapped frame: letterbox -> SCRFD (5 ms) -> align (Umeyama, +8 template) -> swapper (150 ms) -> store patch+M. Source embedding + `emap` latent computed once per source face.
+- Pipeline code is frame-in/patch-out (`CVPixelBuffer` in) and shared with Phase 1 (photo) and Phase 3 (export; export uses the same compositor offline).
+- Memory: cache holds patches only (~88 MB/min), persisted to disk per video; evict by a byte cap, furthest from the playhead first. Raw frames are never cached by us.
 
 ## Mode A: Background render from the playhead (PRIMARY, recommended)
 - Seek anywhere: swapping starts at that point and runs ahead, every frame, full quality.
@@ -27,8 +32,10 @@ Each mode is an independent, user-selectable option in a player mode picker; non
 - Pause/resume, cancel, and thermal-aware throttling (`ProcessInfo.thermalState`).
 
 ## Mode B: Reduced-rate live preview (instant, always available)
-- Playback runs at real video speed. Swap about 6 frames/s (whatever the phone sustains) and hold each swapped frame until the next one is ready. Audio stays in sync.
-- Face looks choppy but you see the result immediately after any seek. This is the fallback for un-rendered ranges and the "quick look" mode.
+- Precisely: every displayed frame is the CURRENT raw frame (video and audio stay smooth) plus the latest finished patch pasted at that patch's own M. Only the face updates at ~6 Hz; it does not hold the whole frame.
+- Latency compensation: the swap worker picks the source frame at playhead + measured pipeline latency (~160 ms, measured at runtime), so the patch arrives roughly on time instead of ~150 ms behind the audio.
+- Shown immediately after any seek. Face lags/choppy on fast motion. This is the "quick look" mode and the optional fallback for un-rendered ranges.
+- Note: B with the current frame's M instead of the patch's own M is Mode C. The real difference between B and C is whether the face is re-detected every frame.
 
 ## Mode C: Swap every Nth frame + re-warp (EXPERIMENTAL, needs a quality test first)
 - Detection is cheap (5 ms), so detect/track the face on EVERY frame. Keep the last swapped 128px patch; for in-between frames, re-align it with the current frame's landmarks and paste back (cheap, Metal).
@@ -39,6 +46,7 @@ Each mode is an independent, user-selectable option in a player mode picker; non
 - VisoMaster "Strength" runs the swapper `itex = ceil(strength/100)` times; pass k feeds pass k-1's output back in with the SAME latent, then blends the final output with the previous pass by `alpha = (strength mod 100)/100` (alpha = 1 when it is an exact multiple). Verified in `kaiser62/visoswap` `visoswap/processors/workers/frame_worker.py` (lines ~434-456, 583-609). Higher strength = more source identity, fewer target expressions.
 - Cost multiplies: strength 150 = 2 passes ~ 300 ms/frame. So: default 1 pass (100). Offer strength ONLY in Mode A / Phase 3 export, with a visible cost estimate. Not in Mode B/C live preview.
 - Task: verify the effect on the test images in Python before building (1 vs 2 passes, alpha blend).
+- LICENCE: `kaiser62/visoswap` is GPL-3.0. Do NOT copy its code into this public repo; the strength idea is reimplemented here from the description above only.
 
 ## Seek behaviour
 - On seek: cancel in-flight work, flush tracker, show the raw frame immediately, then continue in the selected mode (B: swap resumes at once; A: render restarts from the new position, optionally with B filling in if the combo is on; C: re-detect and warp).
