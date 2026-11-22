@@ -38,6 +38,8 @@ print("tkps max diff px vs python:", maxDiff(tf.landmarks.flatMap { [$0.x, $0.y]
 let M = FaceAlign.estimate(landmarks: tf.landmarks, size: 128)
 print("M max diff vs python:", maxDiff([M.a, M.b, M.tx, M.c, M.d, M.ty], g["M"]!))
 
+let Mg = FaceAlign.estimate(landmarks: (0..<5).map { (x: g["tkps"]![2 * $0], y: g["tkps"]![2 * $0 + 1]) }, size: 128)
+print("M from PYTHON's own landmarks vs python M (isolates alignment math):", maxDiff([Mg.a, Mg.b, Mg.tx, Mg.c, Mg.d, Mg.ty], g["M"]!))
 let lat = try pipe.latent(forSource: src, face: sf)
 let gl = g["latent"]!
 print("latent cosine vs python:", zip(lat, gl).map { Double($0) * $1 }.reduce(0, +))
@@ -51,6 +53,12 @@ print(String(format: "128px patch PSNR vs python Core ML: %.2f dB", 10 * log10(2
 let out = try Compositor.composite(tgt, patches: [patch])
 try PixelBuf.writePNG(out, to: test.appendingPathComponent("out_swift.png"))
 print("wrote out_swift.png")
+
+// multi-face: swap every detected target face
+let allFaces = try pipe.detect(tgt)
+print("target faces detected:", allFaces.count, allFaces.map { String(format: "%.2f/%.0fpx", $0.score, $0.x2 - $0.x1) })
+let allPatches = try allFaces.map { try pipe.swap(frame: tgt, face: $0, latent: lat) }
+try PixelBuf.writePNG(try Compositor.composite(tgt, patches: allPatches), to: test.appendingPathComponent("out_swift_all.png"))
 
 // timing (warm)
 t0 = Date()

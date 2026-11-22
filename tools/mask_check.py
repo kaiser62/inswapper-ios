@@ -52,9 +52,29 @@ def blend(mask):
     return (m * bgr + (1 - m) * tgt.astype(np.float32)).astype(np.uint8)
 
 
-rm, am = ref_mask(M), analytic_mask(M, H, W)
-print('mask abs diff mean %.4f max %.3f' % (np.abs(rm - am).mean(), np.abs(rm - am).max()))
-r, an = blend(rm), blend(am)
-mse = float(np.mean((r.astype(np.float32) - an.astype(np.float32)) ** 2))
-print('blended image PSNR ref-vs-analytic: %.2f dB' % (10 * np.log10(255 ** 2 / max(mse, 1e-9))))
-cv2.imwrite(str(T / 'out_analytic.png'), an)
+def variants():
+    IM = cv2.invertAffineTransform(M)
+    cx, cy = IM @ np.array([64, 64, 1.0])
+    yield 'golden', M
+    for deg in (15, 30, 45, -30):  # rotate the face about its centre
+        R = cv2.getRotationMatrix2D((float(cx), float(cy)), deg, 1.0)
+        Rh = np.vstack([R, [0, 0, 1]]); Mh = np.vstack([M, [0, 0, 1]])
+        yield 'rot%+d' % deg, (Mh @ np.linalg.inv(Rh))[:2]
+    A = np.array([[3.0, 0, 64 - 3 * 64], [0, 3.0, 64 - 3 * 64]])  # face 3x smaller in the image
+    yield 'small/3', (np.vstack([A, [0, 0, 1]]) @ np.vstack([M, [0, 0, 1]]))[:2]
+    for name, (dx, dy) in {'offframe-right': (W - 20 - cx, 0), 'offframe-top': (0, 10 - cy)}.items():
+        T = np.array([[1, 0, dx], [0, 1, dy], [0, 0, 1.0]])
+        yield name, (np.vstack([M, [0, 0, 1]]) @ np.linalg.inv(T))[:2]
+
+
+for name, Mv in variants():
+    Mg = M
+    M = Mv
+    try:
+        rm, am = ref_mask(Mv), analytic_mask(Mv, H, W)
+        r, an = blend(rm), blend(am)
+        mse = float(np.mean((r.astype(np.float32) - an.astype(np.float32)) ** 2))
+        print('%-15s mask mean diff %.4f max %.3f | blended PSNR %.2f dB' % (name, np.abs(rm - am).mean(), np.abs(rm - am).max(), 10 * np.log10(255 ** 2 / max(mse, 1e-9))))
+    except Exception as ex:
+        print(name, 'ERR', ex)
+    M = Mg

@@ -137,12 +137,13 @@ struct PhotoView: View {
     @StateObject private var vm = PhotoVM()
     @State private var srcItem: PhotosPickerItem?
     @State private var tgtItem: PhotosPickerItem?
+    @State private var installed = ModelStore.isInstalled
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    if !ModelStore.isInstalled {
+                    if !installed {
                         Text("Models are not installed. Import models.zip in the Models & Bench tab first.").foregroundStyle(.red)
                     }
                     HStack {
@@ -151,11 +152,11 @@ struct PhotoView: View {
                         PhotosPicker(selection: $tgtItem, matching: .images) { Label("Target photo", systemImage: "photo") }
                             .buttonStyle(.bordered)
                     }
-                    .disabled(vm.busy || !ModelStore.isInstalled)
+                    .disabled(vm.busy || !installed)
                     if let s = vm.sourceImage {
                         Image(decorative: s, scale: 1).resizable().scaledToFit().frame(height: 120).clipShape(RoundedRectangle(cornerRadius: 8))
                     }
-                    if let t = vm.targetImage, vm.resultImage == nil {
+                    if let t = vm.targetImage {
                         Image(decorative: t, scale: 1).resizable().scaledToFit()
                             .overlay(GeometryReader { geo in
                                 let k = geo.size.width / CGFloat(t.width)
@@ -179,6 +180,7 @@ struct PhotoView: View {
                         }
                     }
                     if let r = vm.resultImage {
+                        Text("Result (pick other faces above and tap Swap again)").font(.caption)
                         Image(decorative: r, scale: 1).resizable().scaledToFit()
                     }
                     Button("Swap") { vm.swap() }.buttonStyle(.borderedProminent)
@@ -197,6 +199,7 @@ struct PhotoView: View {
             }
             .navigationTitle("InSwap")
         }
+        .onAppear { installed = ModelStore.isInstalled }
         .onChange(of: srcItem) { _, item in
             Task { if let d = try? await item?.loadTransferable(type: Data.self) { vm.setSource(d) } }
         }
