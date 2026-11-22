@@ -4,6 +4,9 @@
 
 **Goal:** open a video, play and seek anywhere, and get swapped faces as fast as the phone allows, with honest feedback about what is ready.
 
+## Resolution target (user decision 2026-11-23)
+720p is the default working/display resolution; 1080p is considered too heavy for the phone for now. Decode/composite at 720p (downscale larger sources at decode via the reader's output settings); 1080p+ becomes an optional later setting. Patch cache size is unaffected (128 px patches). Raw 720p BGRA frame = ~3.7 MB.
+
 ## Mode selection (user request 2026-11-23)
 Each mode is an independent, user-selectable option in a player mode picker; none requires another to work. The picker shows each mode's trade-off (smoothness vs wait vs expression accuracy) and the current measured swap rate.
 - **A: Background render** works standalone: when selected, un-rendered ranges show the RAW video (no swapping) with a "rendering..." indicator instead of falling back to B.
