@@ -5,3 +5,7 @@ tools/models/
 models.zip
 emap.bin
 .DS_Store
+*.xcodeproj/
+app/InSwapBench/Info.plist
+build/
+DerivedData/

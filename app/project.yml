@@ -1,0 +1,34 @@
+name: InSwapBench
+options:
+  bundleIdPrefix: dev.kaiser62
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    exactVersion: 0.9.20
+targets:
+  InSwapBench:
+    type: application
+    platform: iOS
+    sources:
+      - path: InSwapBench
+    dependencies:
+      - package: ZIPFoundation
+    info:
+      path: InSwapBench/Info.plist
+      properties:
+        CFBundleDisplayName: InSwapBench
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.kaiser62.inswapbench
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
