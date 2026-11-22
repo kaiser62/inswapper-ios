@@ -49,7 +49,7 @@ final class FacePipeline {
         let tDecode = Date(); defer { timings["decode+nms", default: 0] += Date().timeIntervalSince(tDecode) * 1000 }
         func arr(_ n: String) throws -> [Float] {
             guard let a = out.featureValue(for: n)?.multiArrayValue else { throw PipelineError.badModel("missing output " + n) }
-            return a.toFloats()
+            return timed("readback") { a.toFloats() }
         }
         var cand: [DetectedFace] = []
         for (idx, stride) in [8, 16, 32].enumerated() {
@@ -112,7 +112,7 @@ final class FacePipeline {
         for i in 0..<512 { lat[i] = NSNumber(value: latent[i]) }
         let out = try timed("swapper") { try swapper.prediction(from: MLDictionaryFeatureProvider(dictionary: [
             "target": MLFeatureValue(pixelBuffer: crop), "latent": MLFeatureValue(multiArray: lat)])) }
-        guard let p = out.featureValue(for: "swapped")?.multiArrayValue?.toFloats(), p.count == 3 * 128 * 128
+        guard let p = timed("readback", { out.featureValue(for: "swapped")?.multiArrayValue?.toFloats() }), p.count == 3 * 128 * 128
         else { throw PipelineError.badModel("swapped") }
         var bgr = [UInt8](repeating: 0, count: 128 * 128 * 3)
         let plane = 128 * 128

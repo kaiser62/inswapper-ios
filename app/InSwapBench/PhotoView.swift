@@ -42,8 +42,11 @@ final class PhotoVM: ObservableObject {
                 let p = try await pipeline()
                 status = "Analysing source face…"
                 let box = try await Task.detached(priority: .userInitiated) { () -> Box<(CVPixelBuffer, [Float])> in
+                    let tl = Date()
                     let buf = try PixelBuf.load(data: data)
+                    let loadMs = Date().timeIntervalSince(tl) * 1000
                     p.resetTimings()
+                    p.addTiming("decode-image", loadMs)
                     guard let face = try p.detect(buf).max(by: { $0.area < $1.area }) else { throw PipelineError.noFace }
                     return Box(v: (buf, try p.latent(forSource: buf, face: face)))
                 }.value
@@ -68,8 +71,11 @@ final class PhotoVM: ObservableObject {
                 let p = try await pipeline()
                 status = "Detecting faces…"
                 let box = try await Task.detached(priority: .userInitiated) { () -> Box<(CVPixelBuffer, [DetectedFace])> in
+                    let tl = Date()
                     let buf = try PixelBuf.load(data: data)
+                    let loadMs = Date().timeIntervalSince(tl) * 1000
                     p.resetTimings()
+                    p.addTiming("decode-image", loadMs)
                     return Box(v: (buf, try p.detect(buf)))
                 }.value
                 tgtBuf = box.v.0
@@ -94,18 +100,24 @@ final class PhotoVM: ObservableObject {
             defer { busy = false }
             do {
                 let t0 = Date()
-                let box = try await Task.detached(priority: .userInitiated) { () -> Box<CVPixelBuffer> in
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("swapped-\(Int(Date().timeIntervalSince1970)).png")
+                let box = try await Task.detached(priority: .userInitiated) { () -> Box<CGImage?> in
                     p.resetTimings()
                     let patches = try facesBox.v.map { try p.swap(frame: tgtBox.v, face: $0, latent: lat) }
                     let tc = Date()
                     let out = try Compositor.composite(tgtBox.v, patches: patches)
                     p.addTiming("composite", Date().timeIntervalSince(tc) * 1000)
-                    return Box(v: out)
+                    let tp = Date()
+                    try PixelBuf.writePNG(out, to: url)
+                    p.addTiming("png", Date().timeIntervalSince(tp) * 1000)
+                    let tg = Date()
+                    let cg = PixelBuf.cgImage(from: out)
+                    p.addTiming("cgimage", Date().timeIntervalSince(tg) * 1000)
+                    return Box(v: cg)
                 }.value
-                let url = FileManager.default.temporaryDirectory.appendingPathComponent("swapped-\(Int(Date().timeIntervalSince1970)).png")
-                try PixelBuf.writePNG(box.v, to: url)
-                resultImage = PixelBuf.cgImage(from: box.v); resultURL = url
-                timings += stageTimings(p, prefix: "swap") + String(format: "swap total: %.0f ms\n", Date().timeIntervalSince(t0) * 1000)
+                resultImage = box.v; resultURL = url
+                let (iw, ih) = PixelBuf.size(tgt)
+                timings += stageTimings(p, prefix: "swap \(iw)x\(ih), \(faces.count) face(s)") + String(format: "swap total: %.0f ms\n", Date().timeIntervalSince(t0) * 1000)
                 status = "Done."
             } catch {
                 status = "Swap failed: \(error.localizedDescription)"
