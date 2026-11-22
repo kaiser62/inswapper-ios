@@ -1,5 +1,7 @@
 # Phase 2: Video player with swapping (REWRITTEN 2026-11-23 after device benchmark)
 
+**UPDATE 2026-11-23 (user): Mode C is DROPPED (not worth building after watching the comparison videos). Only Modes A and B remain, each separately selectable. Ignore remaining Mode C text below except as history; task 2.4 is cancelled.**
+
 **Why rewritten:** measured swapper = 150 ms/frame on iPhone 14 Pro (~6.5 swaps/s). Video-rate (24-30 fps) live swapping is not achievable with inswapper_128. User wants three modes, each SELECTABLE on its own (a mode picker), and also usable together where it makes sense (see below).
 
 **Goal:** open a video, play and seek anywhere, and get swapped faces as fast as the phone allows, with honest feedback about what is ready.
@@ -88,7 +90,7 @@ Each mode is an independent, user-selectable option in a player mode picker; non
 2.1 Pipeline core in Swift: DONE in Phase 1 step 1.1 (`app/Core`, verified vs golden on Mac). Remaining here: Metal compositor (same analytic mask math as `Compositor.swift`), patch cache, tracker.
 2.2 Mode picker UI + Mode B player (AVPlayer + display from cache); each mode selectable separately.
 2.3 Mode A background renderer + ranges UI + seek handling.
-2.4 Mode C if 2.0 says it is worth it.
+2.4 CANCELLED (user dropped Mode C).
 2.5 Strength option for Mode A.
 
 ## Done when
