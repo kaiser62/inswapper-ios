@@ -1,0 +1,7 @@
+.venv/
+tools/models/
+*.onnx
+*.mlpackage
+models.zip
+emap.bin
+.DS_Store
