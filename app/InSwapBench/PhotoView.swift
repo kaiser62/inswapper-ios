@@ -14,7 +14,7 @@ final class PhotoVM: ObservableObject {
     @Published var selected: Set<Int> = []
     @Published var resultImage: CGImage?
     @Published var resultURL: URL?
-    @Published var timings = ""
+    @Published var timings = "build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?")\n"
 
     private var pipe: FacePipeline?
     private var srcBuf: CVPixelBuffer?

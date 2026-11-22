@@ -24,11 +24,13 @@ final class FacePipeline {
     let emap: [Float]  // 512x512 row-major
     private let latentShape: [NSNumber]
     /// Accumulated per-stage wall time in ms (reset with `resetTimings`). Shown in the app to measure the Swift CPU cost.
-    private(set) var timings: [String: Double] = [:]
-    func resetTimings() { timings = [:] }
-    func addTiming(_ k: String, _ ms: Double) { timings[k, default: 0] += ms }
+    private let timingLock = NSLock()
+    private var _timings: [String: Double] = [:]
+    var timings: [String: Double] { timingLock.lock(); defer { timingLock.unlock() }; return _timings }
+    func resetTimings() { timingLock.lock(); _timings = [:]; timingLock.unlock() }
+    func addTiming(_ k: String, _ ms: Double) { timingLock.lock(); _timings[k, default: 0] += ms; timingLock.unlock() }
     private func timed<T>(_ k: String, _ f: () throws -> T) rethrows -> T {
-        let t = Date(); defer { timings[k, default: 0] += Date().timeIntervalSince(t) * 1000 }
+        let t = Date(); defer { addTiming(k, Date().timeIntervalSince(t) * 1000) }
         return try f()
     }
 
@@ -46,7 +48,7 @@ final class FacePipeline {
     func detect(_ frame: CVPixelBuffer, threshold: Float = 0.5) throws -> [DetectedFace] {
         let (canvas, scale) = try timed("letterbox") { try PixelBuf.letterbox(frame) }
         let out = try timed("scrfd") { try scrfd.prediction(from: MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: canvas)])) }
-        let tDecode = Date(); defer { timings["decode+nms", default: 0] += Date().timeIntervalSince(tDecode) * 1000 }
+        let tDecode = Date(); defer { addTiming("decode+nms", Date().timeIntervalSince(tDecode) * 1000) }
         func arr(_ n: String) throws -> [Float] {
             guard let a = out.featureValue(for: n)?.multiArrayValue else { throw PipelineError.badModel("missing output " + n) }
             return timed("readback") { a.toFloats() }

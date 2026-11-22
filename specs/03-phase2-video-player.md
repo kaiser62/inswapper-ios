@@ -59,9 +59,9 @@ Each mode is an independent, user-selectable option in a player mode picker; non
 | 4 | 34.2 / 28.7 | 33.2 / 28.7 | 28.4 / 23.1 | 25.2 / 20.0 |
 | 6 | 32.0 / 27.2 | 31.0 / 25.8 | 26.4 / 20.8 | 22.8 / 17.6 |
 | raw | 23.9 | | 27.9 | |
-- 24 fps video at the measured ~6.5 swaps/s means N=4 is the realistic sustained setting. C beats B by ~1 dB on a near-static head and ~3 dB with head motion. On the portrait clip the raw frame scores higher than C at N>=4 by this metric: PSNR is a weak proxy and re-warp cannot reproduce mouth/eye motion between swaps.
+- 24 fps video at the measured ~6.5 swaps/s means N=4 is the realistic sustained setting. C beats B by ~1 dB on a near-static head and ~3 dB with head motion. On the portrait clip raw scores 27.9: C is only above raw up to N=4 (28.4) and falls below it from N=6; Mode B (stale M) is already below raw from N=3. PSNR is a weak proxy and re-warp cannot reproduce mouth/eye motion between swaps.
 - Visual (worst-frame contact sheets): head pose/position are right, but mouth and eye state lag by up to N-1 frames (open vs closed mouth on speech). Acceptable for slow/neutral clips, visibly laggy on fast speech.
-- **Verdict: Mode C passes the gate as an EXPERIMENTAL, opt-in mode** (N default 4, user-adjustable, labelled 'expression lag'). It is cheap to build once the compositor exists (same patch, fresh M).
+- Detector jitter (mean |2nd difference| of landmarks): 0.007 inter-eye (~1 px) on the near-static clip, 0.028 on the moving portrait clip (includes real acceleration): small, so the tracker needs only light smoothing.\n- N is not fixed: 24 fps with N=4 needs 6.0 swaps/s vs 6.6 measured with no decode/composite. Treat N as emergent (worker always takes the newest frame), expect an effective N of 4-6.\n- **Gate: the PSNR/still evidence is NOT decisive for Mode C (its artefacts are temporal). Side-by-side videos for the user to judge, each = raw | every-frame swap (Mode A quality) | Mode C | Mode B: `tools/models/test/cmp_stock_{2960,42323}_N{4,6}.mp4`. Mode C stays planned as experimental opt-in, pending the user's call.**
 
 **Strength** (7 targets: test photo + 3 frames per clip; identity = ArcFace cos of the 112 crop vs the source; drift = mean landmark shift / inter-eye distance on the re-detected result):
 | passes | identity cos | landmark drift |
@@ -71,8 +71,9 @@ Each mode is an independent, user-selectable option in a player mode picker; non
 | 150 (blend .5) | 0.922 | 0.043 |
 | 200 (2) | 0.924 | 0.050 |
 | 300 (3) | 0.924 | 0.063 |
-- ArcFace identity is already saturated after 1 pass; extra passes add ~0.003 cos but 40-80% more landmark drift (expression/geometry shifts toward the source), each costing +150 ms/frame. Visually (sheet_strength.png) extra passes make brows/eyes slightly more source-like and sharper. Residual artefacts (ghost beard edge on the bearded clip) come from the swapper, not the pass count and are not fixed by strength.
-- **Decision: keep Strength as an optional Mode A / export setting (default 1 pass), cost shown; value is subtle, not a headline feature.**
+- The identity metric is INCONCLUSIVE: it uses the same ArcFace that produces the latent, so it saturates by construction. The drift rise (0.035 -> 0.063) agrees with the user's VisoMaster observation (more source identity, fewer target expressions). Judge visually: `tools/models/test/sheet_strength.png` (cols orig | 100 | 150 | 200 | 300). Each pass costs +150 ms/frame.
+- The 'ghost beard' on the bearded clip is present in the raw 128 px swapper output (`patch_stock_2960.png`), so it is the swapper, not the paste-back mask.
+- **Decision unchanged: Strength is an optional Mode A / export setting (default 1 pass), cost shown.**
 
 ## Seek behaviour
 - On seek: cancel in-flight work, flush tracker, show the raw frame immediately, then continue in the selected mode (B: swap resumes at once; A: render restarts from the new position, optionally with B filling in if the combo is on; C: re-detect and warp).

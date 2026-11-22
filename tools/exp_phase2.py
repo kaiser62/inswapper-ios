@@ -60,6 +60,10 @@ def modec(clip, start, count, src_path, step=1):
     H, W = frames[0].shape[:2]
     ref = [rp.paste_back(f, p[0], p[1], p[2]) for f, p in zip(frames, patches)]
     print(f"{clip.name}: {len(frames)} frames with a face, {W}x{H}")
+    # detector jitter: mean |second difference| of landmarks (discounts steady motion), in inter-eye distances
+    K = np.array(kpss); iod = np.linalg.norm(K[:, 0] - K[:, 1], axis=1).mean()
+    acc = np.abs(K[2:] - 2 * K[1:-1] + K[:-2]).reshape(len(K) - 2, -1)
+    print(f"  landmark jitter (mean |2nd difference|): {acc.mean() / iod:.4f} inter-eye, p95 {np.percentile(acc, 95) / iod:.4f}  (iod {iod:.0f}px)")
     rows = {}
     for N in (2, 3, 4, 6, 12):
         sc, sb, sraw = [], [], []
@@ -77,6 +81,29 @@ def modec(clip, start, count, src_path, step=1):
         rows[N] = (np.mean(sc), np.percentile(sc, 10), np.mean(sb), np.percentile(sb, 10), np.mean(sraw))
         print(f"  N={N:2d}  Mode C face PSNR vs every-frame swap (in-between frames only): mean {rows[N][0]:.1f} dB (p10 {rows[N][1]:.1f}) | "
               f"Mode B (stale M): mean {rows[N][2]:.1f} (p10 {rows[N][3]:.1f}) | unswapped raw: {rows[N][4]:.1f}")
+    # side-by-side motion videos: raw | every-frame swap (Mode A quality) | Mode C | Mode B, cropped around the face
+    allbox = [face_box(p[2], H, W, pad=40) for p in patches]
+    bx0, by0 = min(x[0] for x in allbox), min(x[1] for x in allbox)
+    bx1, by1 = max(x[2] for x in allbox), max(x[3] for x in allbox)
+    for N in (4, 6):
+        vw = None
+        for j, f in enumerate(frames):
+            i = (j // N) * N
+            tiles = [f, ref[j], rp.paste_back(f, patches[i][0], patches[i][1], patches[j][2]),
+                     rp.paste_back(f, patches[i][0], patches[i][1], patches[i][2])]
+            labels = ["raw", "every frame (Mode A)", f"Mode C N={N}", f"Mode B N={N}"]
+            row = []
+            for t, lab in zip(tiles, labels):
+                c = cv2.resize(t[by0:by1, bx0:bx1], (int((bx1 - bx0) * 360 / (by1 - by0)), 360))
+                cv2.putText(c, lab, (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                row.append(c)
+            img = np.hstack(row)
+            if vw is None:
+                vw = cv2.VideoWriter(str(T / f"cmp_{clip.stem}_N{N}.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), 24, (img.shape[1], img.shape[0]))
+            vw.write(img)
+        vw.release()
+    # raw 128 px patch of the worst N=6 frame (is the 'ghost beard' in the swapper output or the mask?)
+    N = 6; worst, wj = 999, 0
     # contact sheet: worst-case frame for N=6
     N = 6; worst, wj = 999, 0
     for j, f in enumerate(frames):
@@ -90,6 +117,7 @@ def modec(clip, start, count, src_path, step=1):
              rp.paste_back(frames[j], patches[i][0], patches[i][1], patches[i][2])]
     sheet = np.hstack([cv2.resize(t[y0:y1, x0:x1], (300, 300)) for t in tiles])
     out = T / f"sheet_modec_{clip.stem}.png"; cv2.imwrite(str(out), sheet)
+    cv2.imwrite(str(T / f"patch_{clip.stem}.png"), cv2.resize(np.hstack([patches[j][1], patches[j][0]]), None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST))
     print(f"  worst N=6 frame #{j} ({worst:.1f} dB); sheet [raw | every-frame swap | Mode C | Mode B] -> {out.name}")
     return rows
 
