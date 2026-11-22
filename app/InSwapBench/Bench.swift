@@ -61,9 +61,16 @@ enum Bench {
     }
 
     static func run(log: @escaping (String) -> Void) async {
-        UIApplication.shared.isIdleTimerDisabled = true
-        defer { UIApplication.shared.isIdleTimerDisabled = false }
-        log("device \(UIDevice.current.model), iOS \(UIDevice.current.systemVersion), thermal \(thermal())")
+        let info: String = await MainActor.run {
+            UIApplication.shared.isIdleTimerDisabled = true   // keep screen on: a lock suspends the app mid-run
+            return "device \(UIDevice.current.model), iOS \(UIDevice.current.systemVersion)"
+        }
+        log("\(info), thermal \(thermal())")
+        log("Keep this app in the foreground. Low Power Mode off, not charging.")
+
+        // Sustained test FIRST, on a cool phone: it is the closest proxy for real playback.
+        await sustained(log: log)
+
         let configs: [(String, MLComputeUnits)] = [
             ("cpuAndNeuralEngine", .cpuAndNeuralEngine),
             ("cpuAndGPU", .cpuAndGPU),
@@ -74,6 +81,7 @@ enum Bench {
             log("\n== \(label)")
             for name in ModelStore.names {
                 do {
+                    log("loading \(name) (\(label))… first Neural Engine load compiles on device and can take a while")
                     let t0 = nowMs()
                     let model = try load(name, units)
                     let loadMs = nowMs() - t0
@@ -108,12 +116,22 @@ enum Bench {
             log("\n(compute plan skipped: needs iOS 17.4+)")
         }
 
+        await MainActor.run { UIApplication.shared.isIdleTimerDisabled = false }
+        log("\nDONE")
+    }
+
+    /// 60 s loop of scrfd + swapper per frame on cpuAndNeuralEngine.
+    /// Pessimistic (detects every frame) and optimistic (no letterbox/align/paste-back): read as a rough proxy.
+    static func sustained(log: @escaping (String) -> Void) async {
         log("\n== sustained 60 s: scrfd + swapper per frame, cpuAndNeuralEngine")
         do {
+            log("loading scrfd + swapper… (first load compiles on device, can take a while)")
+            let t0 = nowMs()
             let det = try load("scrfd", .cpuAndNeuralEngine)
             let swp = try load("swapper", .cpuAndNeuralEngine)
             let di = try input(for: "scrfd"), si = try input(for: "swapper")
             for _ in 0..<5 { _ = try await det.prediction(from: di); _ = try await swp.prediction(from: si) }
+            log(String(format: "load + warmup %.0f ms (includes one-time compile on first run)", nowMs() - t0))
             let start = nowMs()
             var frames = 0, lastFrames = 0
             var lastLog = start
@@ -133,7 +151,6 @@ enum Bench {
         } catch {
             log("sustained FAILED \(error.localizedDescription)")
         }
-        log("\nDONE")
     }
 
     @available(iOS 17.4, *)

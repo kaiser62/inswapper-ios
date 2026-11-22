@@ -10,3 +10,4 @@ app/InSwapBench/Info.plist
 build/
 DerivedData/
 *.ipa
+__pycache__/

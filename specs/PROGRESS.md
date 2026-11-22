@@ -22,6 +22,14 @@ After every step, consult the advisor to check the work; log its verdict below.
 - [ ] Confirm where to download the weights from (non-commercial, personal use)
 - [ ] Python 3.11+ available locally (system python is 3.9)
 
+## Go/no-go reading (written BEFORE any device numbers, so the decision isn't fitted to results)
+- GO if ALL: swapper mean <= ~40 ms under cpuAndNeuralEngine; on-device MLComputePlan shows the swapper's ops mostly on ANE; sustained loop >= ~10 fps (scrfd + swapper every frame).
+- Caveats on the sustained number: pessimistic (runs detection EVERY frame, real playback tracks between detections) and optimistic (excludes letterbox, alignment, paste-back). Treat as a rough proxy.
+- If cpuAndGPU beats cpuAndNeuralEngine, the plan changes (GPU-first / different quantisation). Record it as a result, not noise.
+- NO-GO / rethink if swapper > ~100 ms or placement mostly CPU/GPU with poor speed.
+- Run the benchmark TWICE (first run includes one-time on-device compile). Record which install path was tested: direct SideStore vs patched LiveContainer (Phase 0 must confirm file import + Core ML compile work there).
+- Valid-run checklist: Low Power Mode off, not charging, other apps closed, app foregrounded, phone cool at start.
+
 ## Benchmark results (fill in after Phase 0)
 | Model | Mean ms | p95 ms | Compute unit |
 |---|---|---|---|
