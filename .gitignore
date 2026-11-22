@@ -11,3 +11,4 @@ build/
 DerivedData/
 *.ipa
 __pycache__/
+InSwapBench-ipa/
