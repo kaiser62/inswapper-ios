@@ -144,3 +144,9 @@ Both are review-only guidance; no commands/fetches/settings changes. Installed t
 - Advisor verdict: compiles != works. Fixed: auto-lock during export, retry after backgrounding, ETA window ignores already-rendered frames, thermal refresh timer, sheet->cover handoff via onDismiss, plan computed once.
 - Screenshots (run 45142643980) reviewed for sheet/running/done: fine at default and xxl.
 - NOT verified on device: end-to-end export, cancel+resume, home-screen excursion, Save to Photos, Share. Open: the 1 s pre-attach sleep is a guess; Exports folder is never pruned; ETA uses hardcoded 15/6.5 swaps/s.
+
+## Redesign (Nov 23)
+- Step 1 Theme + Player layout (builds 47-48); step 2 four-tab shell (build 49). Advisor verdicts: keep native TabView, use text styles not px sizes, view-only commits.
+- Step 3 (VisoSwap /mobile port, spec from read-only agent of kaiser62/visoswap frontend/src/mobile): palette bg #090c0f card #11171c raised #182129 line #293640 accent #32bbd0 active #153b43 good #5dcc8b bad #ef7265.
+  - 3a: tokens, card(), Segmented, button styles (pushed). 3b: Player -> Studio (transport row, face card, status pill). Later: Faces grid with ring/check, Takes list over Documents/Exports (also prunes), tab naming decision.
+  - Dropped on purpose: Start/Stop/Force Stop, Interval mode, Projects, 200+ Controls, Queue, "Resolution" labels (misleading). Overlay ON/OFF is a separate non-view-only commit.
