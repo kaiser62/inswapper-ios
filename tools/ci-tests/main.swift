@@ -159,5 +159,13 @@ check(noDir.evict(maxBytes: 0, keepNear: 0) == 10 && noDir.count == 0, "PatchSto
 try? FileManager.default.removeItem(at: tdir)
 _ = span
 
+// PatchStore VFR hold times
+let vf = PatchStore(frameDurationUs: 40_000)
+vf.put(pts: 0, [dummy], next: 250_000); vf.put(pts: 250_000, [dummy], next: 290_000); vf.put(pts: 290_000, [dummy])
+check(vf.get(displayedAt: 200_000) != nil && vf.get(displayedAt: 249_000) != nil, "PatchStore VFR: a frame is shown until the NEXT source frame (long gap)")
+check(vf.renderedRanges() == [0...330_000], "PatchStore VFR: gap shorter than hold keeps ONE range")
+vf.put(pts: 900_000, [dummy])
+check(vf.renderedRanges().count == 2 && vf.get(displayedAt: 600_000) == nil, "PatchStore VFR: real hole stays a hole")
+
 print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)

@@ -46,17 +46,24 @@ final class PlayerVM: ObservableObject {
 
     private var videoURL: URL?, sourceData: Data?
     private var timer: Timer?
+    private var needsPrepare = false
+    private var active = true, visible = true
+    @Published var diagnostics = ""
+    static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
 
     func setVideo(_ url: URL) { videoURL = url; prepare() }
     func setSource(_ data: Data) { sourceData = data; sourceImage = ImageFile.cgImage(data: data, maxSide: 200); prepare() }
 
     private func prepare() {
-        guard let url = videoURL, let data = sourceData, !busy else { return }
+        guard let url = videoURL, let data = sourceData else { return }
+        if busy { needsPrepare = true; return }   // a pick made while loading is applied when this finishes
         busy = true
         engine?.shutdown(); engine = nil; timer?.invalidate()
         Task {
-            defer { busy = false }
+            defer { busy = false; if needsPrepare { needsPrepare = false; prepare() } }
             do {
+                try? AVAudioSession.sharedInstance().setCategory(.playback)   // play through the silent switch
+                try? AVAudioSession.sharedInstance().setActive(true)
                 status = "Loading models (first load compiles for the Neural Engine and can take a while)…"
                 let pipe = try await SharedPipeline.get()
                 status = "Analysing source face…"
@@ -100,12 +107,23 @@ final class PlayerVM: ObservableObject {
         e.trimMemory()
         statsText = String(format: "%.1f swaps/s · latency %.0f ms · cached %d frames (%.0f MB) · thermal %@",
                            s.swapsPerSecond, s.latencyMs, s.cachedFrames, s.cacheMB, Self.thermalName(s.thermal))
+        let ps = presenter
+        diagnostics = "build \(Self.build) · mode \(mode.rawValue)\(combo ? "+B" : "") · video \(e.reader.width)x\(e.reader.height) \(String(format: "%.1f", e.duration)) s · t=\(String(format: "%.2f", e.currentTime))\n"
+            + statsText + "\npresented \(ps?.presented ?? 0), skipped \(ps?.skipped ?? 0) · ranges \(ranges.count) · retries \(s.retries)"
+            + "\nlast error: \(s.lastError ?? "none")\nstatus: \(status)"
     }
 
     func togglePlay() { guard let e = engine else { return }; if e.isPlaying { e.pause() } else { e.play() }; playing = e.isPlaying }
     func scrub(_ t: Double) { time = t; engine?.scrub(to: t) }
     func endScrub() { scrubbing = false; engine?.seek(to: time) }
-    func setBackground(_ bg: Bool) { engine?.workPaused = bg; if bg { engine?.pause() } }
+    func setActive(_ a: Bool) { active = a; applyWork() }
+    func setVisible(_ v: Bool) { visible = v; applyWork() }
+    private func applyWork() {
+        let on = active && visible
+        engine?.workPaused = !on
+        if !on { engine?.pause(); playing = false }
+        UIApplication.shared.isIdleTimerDisabled = on && engine != nil
+    }
     func teardown() { timer?.invalidate(); engine?.shutdown(); engine = nil; UIApplication.shared.isIdleTimerDisabled = false }
 
     static func thermalName(_ s: ProcessInfo.ThermalState) -> String {
@@ -132,7 +150,7 @@ struct PlayerView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        PhotosPicker(selection: $videoItem, matching: .videos) { Label("Video", systemImage: "film") }.buttonStyle(.bordered)
+                        PhotosPicker(selection: $videoItem, matching: .videos, preferredItemEncoding: .current) { Label("Video", systemImage: "film") }.buttonStyle(.bordered)
                         Button { importing = true } label: { Label("File", systemImage: "folder") }.buttonStyle(.bordered)
                         PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square") }.buttonStyle(.bordered)
                         if let img = vm.sourceImage { Image(decorative: img, scale: 1).resizable().scaledToFill().frame(width: 36, height: 36).clipShape(Circle()) }
@@ -156,7 +174,10 @@ struct PlayerView: View {
                         Text("B shows the current frame with the newest swapped face (about 6-8 updates/s, timed ahead of the playhead). Instant after any seek; the face lags on fast motion.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                    if !vm.statsText.isEmpty { Text(vm.statsText).font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary) }
+                    if !vm.diagnostics.isEmpty {
+                        Text(vm.diagnostics).font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
+                        Button("Copy diagnostics") { UIPasteboard.general.string = vm.diagnostics }.buttonStyle(.bordered).font(.footnote)
+                    }
                 }.padding()
             }
             .navigationTitle("Player")
@@ -176,9 +197,9 @@ struct PlayerView: View {
             let dst = FileManager.default.temporaryDirectory.appendingPathComponent("video-\(UUID().uuidString).\(url.pathExtension)")
             do { try FileManager.default.copyItem(at: url, to: dst); vm.setVideo(dst) } catch { vm.status = "Could not open that file: \(error.localizedDescription)" }
         }
-        .onChange(of: scenePhase) { _, phase in vm.setBackground(phase != .active) }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .onChange(of: scenePhase) { _, phase in vm.setActive(phase == .active) }
+        .onDisappear { vm.setVisible(false) }   // switching tabs pauses playback and the swap workers
+        .onAppear { vm.setVisible(true) }
     }
 
     private var controls: some View {

@@ -3,7 +3,7 @@ import Foundation
 
 enum PlayMode: String { case renderAhead = "A", livePreview = "B" }
 
-struct EngineStats { var swapsPerSecond = 0.0, latencyMs = 0.0, cachedFrames = 0, cacheMB = 0.0, thermal = ProcessInfo.ThermalState.nominal }
+struct EngineStats { var swapsPerSecond = 0.0, latencyMs = 0.0, cachedFrames = 0, cacheMB = 0.0, thermal = ProcessInfo.ThermalState.nominal, lastError: String? = nil, retries = 0 }
 
 /// The Phase 2 player brain (no UI types): AVPlayer = clock + audio, display frames pulled from an
 /// AVPlayerItemVideoOutput (same upright/scaled video composition the swap reader uses, verified pixel-identical),
@@ -26,6 +26,7 @@ final class PlayerEngine {
     private var lastFrame: (CVPixelBuffer, Double)?
     private var windowStart = Date(), windowCount = 0, rate = 0.0
     private(set) var lastError: String?
+    private var retries = 0, lastTick = Date.distantPast
 
     init(pipeline: FacePipeline, reader: VideoReader, latent: [Float], cacheDirectory: URL?, identity: String) {
         self.pipeline = pipeline; self.reader = reader; self.latent = latent; self.cacheDirectory = cacheDirectory
@@ -92,7 +93,7 @@ final class PlayerEngine {
         while workPaused || ProcessInfo.processInfo.thermalState == .critical { Thread.sleep(forTimeInterval: 0.2); if renderToken.isCancelled && liveToken.isCancelled { return } }
         if ProcessInfo.processInfo.thermalState == .serious { Thread.sleep(forTimeInterval: 0.15) }
     }
-    private func tick() { lock.lock(); windowCount += 1
+    private func tick() { lock.lock(); windowCount += 1; lastTick = Date()
         let dt = Date().timeIntervalSince(windowStart)
         if dt >= 2 { rate = Double(windowCount) / dt; windowCount = 0; windowStart = Date() }
         lock.unlock() }
@@ -103,7 +104,21 @@ final class PlayerEngine {
         let worker = RenderWorker(pipeline: pipeline, reader: reader, store: renderStore, latent: latent)
         renderQueue.async { [weak self] in
             guard let self, !token.isCancelled else { return }
-            do { try worker.run(from: t, cancel: token, gate: { self.gate() }, onFrame: { _ in self.tick() }) } catch { self.lastError = "\(error)" }
+            var attempts = 0, sinceFlush = 0, from = t
+            while !token.isCancelled {
+                do {
+                    try worker.run(from: from, cancel: token, gate: { self.gate() }, onFrame: { _ in
+                        self.tick(); sinceFlush += 1
+                        if sinceFlush >= Int(PatchStore.chunkFrames) { sinceFlush = 0; self.renderStore.flush() }   // a kill loses < 1 chunk
+                    })
+                    break
+                } catch {
+                    // e.g. the asset reader failing after a background excursion: note it, retry from the playhead
+                    self.noteError("render: \(error)"); attempts += 1
+                    if attempts > 5 { break }
+                    Thread.sleep(forTimeInterval: 1); from = self.currentTime
+                }
+            }
             self.renderStore.flush()
         }
     }
@@ -115,10 +130,22 @@ final class PlayerEngine {
         liveWorker = worker
         liveQueue.async { [weak self] in
             guard let self, !token.isCancelled else { return }
-            do { try worker.run(playhead: { self.player.currentTime().seconds }, cancel: token, gate: { self.gate() }, onPatch: { _ in
-                if self.mode == .livePreview { self.tick() } }) } catch { self.lastError = "\(error)" }
+            var attempts = 0
+            while !token.isCancelled {
+                do {
+                    try worker.run(playhead: { self.player.currentTime().seconds }, cancel: token, gate: { self.gate() }, onPatch: { _ in
+                        if self.mode == .livePreview { self.tick() } })
+                    break
+                } catch {
+                    self.noteError("live: \(error)"); attempts += 1
+                    if attempts > 5 { break }
+                    Thread.sleep(forTimeInterval: 1)
+                }
+            }
         }
     }
+
+    private func noteError(_ e: String) { lock.lock(); lastError = e; retries += 1; lock.unlock() }
 
     // MARK: display
     /// The frame to draw now (the newest decoded frame; the previous one if none is new) and its display time in seconds.
@@ -151,7 +178,8 @@ final class PlayerEngine {
 
     var stats: EngineStats {
         lock.lock(); defer { lock.unlock() }
-        return EngineStats(swapsPerSecond: rate, latencyMs: (liveWorker?.latency ?? 0) * 1000, cachedFrames: renderStore.count,
-                           cacheMB: Double(renderStore.bytes) / 1e6, thermal: ProcessInfo.processInfo.thermalState)
+        let live = Date().timeIntervalSince(lastTick) < 3   // no swap for 3 s: report 0, not the stale last rate
+        return EngineStats(swapsPerSecond: live ? rate : 0, latencyMs: (liveWorker?.latency ?? 0) * 1000, cachedFrames: renderStore.count,
+                           cacheMB: Double(renderStore.bytes) / 1e6, thermal: ProcessInfo.processInfo.thermalState, lastError: lastError, retries: retries)
     }
 }

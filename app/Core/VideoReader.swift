@@ -25,7 +25,7 @@ final class VideoReader {
         let upright = CGRect(origin: .zero, size: natural).applying(xf)
         let s = min(1.0, Double(maxLongSide) / Double(max(upright.width, upright.height)))
         width = Int((upright.width * s / 2).rounded()) * 2; height = Int((upright.height * s / 2).rounded()) * 2
-        frameDuration = minFD.isValid && minFD.seconds > 0 ? minFD : CMTime(value: 1, timescale: Int32(max(1, nominal.rounded())))
+        frameDuration = nominal > 1 ? CMTime(seconds: 1.0 / Double(nominal), preferredTimescale: 1_000_000) : (minFD.isValid && minFD.seconds > 0 ? minFD : CMTime(value: 1, timescale: 30))
         let tf = xf.concatenating(CGAffineTransform(translationX: -upright.minX, y: -upright.minY))
             .concatenating(CGAffineTransform(scaleX: CGFloat(width) / upright.width, y: CGFloat(height) / upright.height))
         let li = AVMutableVideoCompositionLayerInstruction(assetTrack: t)
@@ -37,13 +37,18 @@ final class VideoReader {
         composition.renderSize = CGSize(width: width, height: height)
         composition.frameDuration = frameDuration
         composition.instructions = [inst]
+        // Always deliver SDR Rec.709 frames (HDR / HLG / Dolby Vision phone clips are converted by AVFoundation).
+        composition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
+        composition.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
+        composition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
     }
 
     var frameDurationUs: Int64 { Int64((frameDuration.seconds * 1_000_000).rounded()) }
 
-    /// Calls `handler(frame, ptsMicroseconds)` for each real frame from the one covering `start` on, until it returns
-    /// false or the video ends. PTS values are always the source grid values: AVAssetReader stamps the first sample of a
-    /// timeRange with the range start (an off-grid duplicate), so we begin ~2 frames early and drop that sample.
+    /// Calls `handler(frame, ptsMicroseconds)` for each real frame from the one DISPLAYED at `start` (the last frame at or
+    /// before it) on, until it returns false or the video ends. PTS values are always the source grid values. AVAssetReader
+    /// stamps the first sample of a timeRange with the range start (an off-grid duplicate), so we begin 0.5 s early (also
+    /// covers variable-frame-rate gaps) and always drop that first sample.
     func read(from start: Double, handler: (CVPixelBuffer, Int64) throws -> Bool) throws {
         let reader = try AVAssetReader(asset: asset)
         let out = AVAssetReaderVideoCompositionOutput(videoTracks: [track], videoSettings: [
@@ -54,35 +59,24 @@ final class VideoReader {
         out.alwaysCopiesSampleData = false
         guard reader.canAdd(out) else { throw VideoError.readerFailed("cannot add output") }
         reader.add(out)
-        let fd = frameDurationUs, startUs = Int64((start * 1_000_000).rounded())
-        let durUs = Int64((duration * 1_000_000).rounded())
-        let readFrom = max(0, min(startUs, durUs - fd) - 2 * fd)   // clamp: a start at/after the end still yields the last frames
+        let fd = frameDurationUs, durUs = Int64((duration * 1_000_000).rounded())
+        let startUs = min(Int64((max(0, start) * 1_000_000).rounded()), max(0, durUs - fd))   // a start at/after the end still yields the last frame
+        let readFrom = max(0, startUs - 500_000)
         reader.timeRange = CMTimeRange(start: CMTime(value: readFrom, timescale: 1_000_000), end: CMTime(seconds: duration, preferredTimescale: 600))
         guard reader.startReading() else { throw VideoError.readerFailed(reader.error?.localizedDescription ?? "startReading") }
         defer { if reader.status == .reading { reader.cancelReading() } }
-        var first = true
-        var held: (CVPixelBuffer, Int64)?   // first sample, kept until the second shows whether it is the stamped duplicate
+        var first = readFrom > 0       // that sample is the stamped duplicate; at 0 it is a real frame
+        var prev: (CVPixelBuffer, Int64)?  // newest frame before `startUs`: the one displayed at `start`
         var go = true
-        func emit(_ pb: CVPixelBuffer, _ pts: Int64) throws {
-            if pts <= min(startUs, durUs - fd) - fd { return }  // before the frame that covers `start`
-            if try !handler(pb, pts) { go = false }
-        }
         while go, let sb = out.copyNextSampleBuffer() {
             guard let pb = CMSampleBufferGetImageBuffer(sb) else { continue }
             let pts = Int64((CMSampleBufferGetPresentationTimeStamp(sb).seconds * 1_000_000).rounded())
-            if first {
-                first = false
-                if readFrom == 0 { try emit(pb, pts) } else { held = (pb, pts) }   // at 0 the first sample is a real frame
-                continue
-            }
-            if let h = held {
-                held = nil
-                if pts - h.1 >= fd * 9 / 10 { try emit(h.0, h.1) }   // not a stamped duplicate (next frame is a full frame away)
-                if !go { break }
-            }
-            try emit(pb, pts)
+            if first { first = false; continue }
+            if pts < startUs { prev = (pb, pts); continue }
+            if let p = prev { prev = nil; if try !handler(p.0, p.1) { go = false; break } }
+            if try !handler(pb, pts) { go = false }
         }
-        if go, let h = held { try emit(h.0, h.1) }
+        if go, let p = prev { _ = try handler(p.0, p.1) }
         if reader.status == .failed { throw VideoError.readerFailed(reader.error?.localizedDescription ?? "failed") }
     }
 }

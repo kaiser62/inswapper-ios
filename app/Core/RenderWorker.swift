@@ -14,17 +14,17 @@ final class RenderWorker {
     /// Blocks until `until` seconds (or the end), cancelled, or an error. Frames already in the store are skipped.
     func run(from start: Double, until: Double? = nil, cancel: CancelToken, gate: (() -> Void)? = nil, onFrame: ((Int64) -> Void)? = nil) throws {
         let endUs = until.map { PatchStore.us($0) }
+        // A frame's patch is stored when the NEXT source frame arrives, so its hold time (VFR-safe) is exact.
+        var pending: (pts: Int64, p: [SwapPatch])?
+        defer { if let pe = pending { store.put(pts: pe.pts, pe.p) } }
         try reader.read(from: start) { frame, pts in
+            if let pe = pending { store.put(pts: pe.pts, pe.p, next: pts); pending = nil }
             gate?()   // pause / thermal throttle hook
             if cancel.isCancelled { return false }
             if let e = endUs, pts >= e { return false }
             if store.has(pts: pts) { return true }
             let face = try pipeline.detect(frame).max { $0.area < $1.area }
-            if let f = face {
-                store.put(pts: pts, [try pipeline.swap(frame: frame, face: f, latent: latent)])
-            } else {
-                store.put(pts: pts, [])
-            }
+            pending = (pts, try face.map { [try pipeline.swap(frame: frame, face: $0, latent: latent)] } ?? [])
             framesDone += 1
             onFrame?(pts)
             return true

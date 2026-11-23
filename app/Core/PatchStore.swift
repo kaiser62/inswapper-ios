@@ -13,6 +13,7 @@ final class PatchStore {
     private let lock = NSLock()
     private var patches: [Int64: [SwapPatch]] = [:]
     private var keys: [Int64] = []          // sorted, every known frame (resident or paged out)
+    private var holds: [Int64: Int64] = [:] // frame pts -> pts of the next source frame (when this one stops being displayed)
     private var resident = Set<Int64>()     // chunk ids whose patches are in RAM
     private var dirty = Set<Int64>()        // resident chunks changed since last written
     private var onDisk = Set<Int64>()       // chunk ids that have a file
@@ -25,8 +26,10 @@ final class PatchStore {
     private func chunk(_ k: Int64) -> Int64 { k >= 0 ? k / (frameDurationUs * Self.chunkFrames) : -1 - ((-k - 1) / (frameDurationUs * Self.chunkFrames)) }
 
     // MARK: basic access
-    func put(pts: Int64, _ p: [SwapPatch]) {
+    /// `next` = presentation time of the following source frame (VFR-safe hold time); default one nominal frame.
+    func put(pts: Int64, _ p: [SwapPatch], next: Int64? = nil) {
         lock.lock(); defer { lock.unlock() }
+        holds[pts] = next ?? pts + frameDurationUs
         let c = chunk(pts)
         ensureResidentLocked(c)
         if patches.updateValue(p, forKey: pts) == nil, !containsLocked(pts) { insertKeyLocked(pts) }
@@ -41,11 +44,11 @@ final class PatchStore {
     }
 
     /// Patches for the frame DISPLAYED at playhead time `t`: the frame with the greatest key <= t (a player shows frame k
-    /// from its PTS until the next one), if it is within 1.5 frame durations; nil = not rendered. Use this from the player.
+    /// from its PTS until the next source frame, `hold`), nil = not rendered. Use this from the player.
     func get(displayedAt t: Int64) -> [SwapPatch]? {
         lock.lock(); defer { lock.unlock() }
         let i = upperBoundLocked(t)
-        guard i > 0, t - keys[i - 1] < frameDurationUs * 3 / 2 else { return nil }
+        guard i > 0, t < (holds[keys[i - 1]] ?? keys[i - 1] + frameDurationUs) + frameDurationUs / 2 else { return nil }
         return fetchLocked(keys[i - 1])
     }
 
@@ -71,13 +74,14 @@ final class PatchStore {
         lock.lock(); defer { lock.unlock() }
         var out: [ClosedRange<Int64>] = []
         var start: Int64?, prev: Int64 = 0
+        func end(_ k: Int64) -> Int64 { holds[k] ?? k + frameDurationUs }
         for k in keys {
-            if start != nil, k - prev <= frameDurationUs * 3 / 2 { prev = k } else {
-                if let s = start { out.append(s...(prev + frameDurationUs)) }
+            if start != nil, k <= end(prev) + frameDurationUs / 2 { prev = k } else {
+                if let s = start { out.append(s...end(prev)) }
                 start = k; prev = k
             }
         }
-        if let s = start { out.append(s...(prev + frameDurationUs)) }
+        if let s = start { out.append(s...end(prev)) }
         return out
     }
 
@@ -101,13 +105,13 @@ final class PatchStore {
             let ks = keys.filter { chunk($0) == c }
             for k in ks { patches[k] = nil; dropped += 1 }
             resident.remove(c); dirty.remove(c)
-            if dir == nil || !onDisk.contains(c) { keys.removeAll { chunk($0) == c } }
+            if dir == nil || !onDisk.contains(c) { for k in ks { holds[k] = nil }; keys.removeAll { chunk($0) == c } }
         }
         return dropped
     }
 
     // MARK: disk persistence
-    private static let magic: UInt32 = 0x50545332  // "PTS2"
+    private static let magic: UInt32 = 0x50545333  // "PTS3"
 
     /// Attach a cache directory. `identity` (video | source face | decode size) guards against stale caches: a different
     /// identity or frame duration wipes the directory. Loads only the key index; patch bytes page in on demand.
@@ -127,7 +131,7 @@ final class PatchStore {
             guard let id = Int64(f.dropFirst().dropLast(4)), let table = readTable(directory.appendingPathComponent(f)) else {
                 try? fm.removeItem(at: directory.appendingPathComponent(f)); continue }
             onDisk.insert(id)
-            for (k, _) in table where !containsLocked(k) { insertKeyLocked(k) }
+            for (k, h, _) in table { holds[k] = h; if !containsLocked(k) { insertKeyLocked(k) } }
         }
         return keys.count
     }
@@ -147,12 +151,12 @@ final class PatchStore {
         var d = Data()
         func put<T>(_ v: T) { withUnsafeBytes(of: v) { d.append(contentsOf: $0) } }
         put(Self.magic); put(UInt32(ks.count))
-        for k in ks { put(k); put(UInt8(patches[k]!.count)) }
+        for k in ks { put(k); put(holds[k] ?? k + frameDurationUs); put(UInt8(patches[k]!.count)) }
         for k in ks { for p in patches[k]! { put(p.M.a); put(p.M.b); put(p.M.tx); put(p.M.c); put(p.M.d); put(p.M.ty); d.append(contentsOf: p.bgr) } }
         if (try? d.write(to: url, options: .atomic)) != nil { onDisk.insert(c); dirty.remove(c) }
     }
 
-    private func readTable(_ url: URL) -> [(Int64, Int)]? {
+    private func readTable(_ url: URL) -> [(Int64, Int64, Int)]? {
         guard let d = try? Data(contentsOf: url, options: .mappedIfSafe), d.count >= 8 else { return nil }
         var o = 0
         func get<T>(_ t: T.Type) -> T? {
@@ -161,16 +165,16 @@ final class PatchStore {
             return d.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: o, as: T.self) }
         }
         guard get(UInt32.self) == Self.magic, let n = get(UInt32.self) else { return nil }
-        var t: [(Int64, Int)] = [], need = 8 + Int(n) * 9
-        for _ in 0..<n { guard let k = get(Int64.self), let np = get(UInt8.self) else { return nil }; t.append((k, Int(np))); need += Int(np) * (48 + 128 * 128 * 3) }
+        var t: [(Int64, Int64, Int)] = [], need = 8 + Int(n) * 17
+        for _ in 0..<n { guard let k = get(Int64.self), let h = get(Int64.self), let np = get(UInt8.self) else { return nil }; t.append((k, h, Int(np))); need += Int(np) * (48 + 128 * 128 * 3) }
         return need == d.count ? t : nil
     }
 
     private func ensureResidentLocked(_ c: Int64) {
         if resident.contains(c) || !onDisk.contains(c) { return }
         guard let url = fileLocked(c), let table = readTable(url), let d = try? Data(contentsOf: url) else { return }
-        var o = 8 + table.count * 9
-        for (k, np) in table {
+        var o = 8 + table.count * 17
+        for (k, _, np) in table {
             var ps: [SwapPatch] = []
             for _ in 0..<np {
                 func dbl(_ i: Int) -> Double { d.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: o + i * 8, as: Double.self) } }
@@ -188,7 +192,7 @@ final class PatchStore {
         return patches[k]
     }
 
-    func removeAll() { lock.lock(); patches = [:]; keys = []; resident = []; dirty = []; onDisk = []; lock.unlock() }
+    func removeAll() { lock.lock(); patches = [:]; holds = [:]; keys = []; resident = []; dirty = []; onDisk = []; lock.unlock() }
 
     // MARK: sorted-key helpers
     private func upperBoundLocked(_ t: Int64) -> Int {
