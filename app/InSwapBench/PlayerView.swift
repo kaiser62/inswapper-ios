@@ -237,8 +237,9 @@ final class PlayerVM: ObservableObject {
 struct PlayerView: View {
     static func cacheLine() -> String {
         let b = CacheManager.totalBytes(root: AppData.patchCacheRoot)
-        return String(format: "Render cache %.0f MB (cap %.1f GB)", Double(b) / 1e6, Double(AppData.cacheCapBytes) / 1e9)
+        return String(format: "%.0f MB of %.1f GB", Double(b) / 1e6, Double(AppData.cacheCapBytes) / 1e9)
     }
+    private enum Next { case none, files, saved, faces }
     @StateObject private var vm = PlayerVM()
     @Environment(\.scenePhase) private var scenePhase
     @State private var videoItem: PhotosPickerItem?
@@ -246,57 +247,45 @@ struct PlayerView: View {
     @State private var importing = false
     @State private var showFaces = false
     @State private var showVideos = false
+    @State private var showVideoSource = false
+    @State private var showFaceSource = false
+    @State private var showSettings = false
+    @State private var next = Next.none
     @State private var cacheText = ""
 
+    private var layoutState: PlayerLayoutState {
+        var s = PlayerLayoutState()
+        s.hasVideo = vm.engine != nil
+        if let e = vm.engine {
+            s.aspect = CGFloat(e.reader.width) / CGFloat(e.reader.height)
+            s.videoDetail = "\(PlayerScrubber.clock(e.duration)) · \(e.reader.width)×\(e.reader.height)"
+        }
+        s.time = vm.time; s.duration = vm.duration; s.playing = vm.playing; s.ranges = vm.ranges
+        s.badge = vm.engine == nil ? "" : "\(vm.swapperName) · \(vm.mode == .renderAhead ? "Render ahead" : "Live")"
+        s.face = vm.sourceImage; s.status = vm.status; s.busy = vm.busy
+        return s
+    }
+
+    private var actions: PlayerLayoutActions {
+        PlayerLayoutActions(chooseVideo: { showVideoSource = true }, chooseFace: { showFaceSource = true },
+                            togglePlay: { vm.togglePlay() }, export: { vm.openExportSheet() }, settings: { openSettings() },
+                            scrub: { vm.scrub($0) }, scrubStart: { vm.scrubbing = true }, scrubEnd: { vm.endScrub() })
+    }
+
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], alignment: .leading, spacing: 8) {
-                        PhotosPicker(selection: $videoItem, matching: .videos, preferredItemEncoding: .current) { Label("Video", systemImage: "film") }.lineLimit(1).fixedSize(horizontal: true, vertical: false).buttonStyle(.bordered)
-                        Button { importing = true } label: { Label("File", systemImage: "folder") }.lineLimit(1).fixedSize(horizontal: true, vertical: false).buttonStyle(.bordered)
-                        Button { showVideos = true } label: { Label("Saved", systemImage: "play.square.stack") }.lineLimit(1).fixedSize(horizontal: true, vertical: false).buttonStyle(.bordered)
-                        PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square") }.lineLimit(1).fixedSize(horizontal: true, vertical: false).buttonStyle(.bordered)
-                        Button { showFaces = true } label: { Label("Library", systemImage: "person.2") }.lineLimit(1).fixedSize(horizontal: true, vertical: false).buttonStyle(.bordered)
-                        if let img = vm.sourceImage { Image(decorative: img, scale: 1).resizable().scaledToFill().frame(width: 36, height: 36).clipShape(Circle()) }
-                    }
-                    if vm.canSaveSource { Button("Save this face to library") { vm.saveSourceToLibrary() }.font(.footnote) }
-                    Text(vm.status).font(.footnote).foregroundStyle(.secondary)
-                    if let e = vm.engine, let pres = vm.presenter {
-                        MetalVideoView(engine: e, presenter: pres)
-                            .aspectRatio(CGFloat(e.reader.width) / CGFloat(e.reader.height), contentMode: .fit)
-                            .background(Color.black)
-                        controls
-                    }
-                    Picker("Mode", selection: $vm.mode) {
-                        Text("A  Render ahead").tag(PlayMode.renderAhead)
-                        Text("B  Live preview").tag(PlayMode.livePreview)
-                    }.pickerStyle(.segmented)
-                    if ModelStore.hasPal8 { Toggle("Fast 8-bit swapper (on by default, 2.4x faster)", isOn: $vm.fastSwapper).font(.footnote) }
-                    if vm.mode == .renderAhead {
-                        Picker("Strength", selection: $vm.strength) {
-                            Text("100").tag(100); Text("150").tag(150); Text("200").tag(200); Text("300").tag(300)
-                        }.pickerStyle(.segmented)
-                        Text("Strength \(vm.strength): \((vm.strength + 99) / 100) swap pass\(vm.strength > 100 ? "es" : ""). Higher may copy the source identity a little more strongly but renders slower; compare on a paused frame. \(vm.costText)").font(.caption).foregroundStyle(.secondary)
-                        Toggle("A + B fallback (live preview where not rendered yet)", isOn: $vm.combo).font(.footnote)
-                        Text("A swaps every frame from the playhead in the background (about 3-5 min of work per minute of video) and shows the green parts of the bar fully swapped. Unrendered parts play raw. Cached on disk per video and face.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        Text("B shows the current frame with the newest swapped face (about 6-8 updates/s, timed ahead of the playhead). Instant after any seek; the face lags on fast motion.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    if !vm.diagnostics.isEmpty {
-                        Text(vm.diagnostics).font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
-                        Button("Copy diagnostics") { UIPasteboard.general.string = vm.diagnostics }.buttonStyle(.bordered).font(.footnote)
-                    }
-                    HStack {
-                        Text(cacheText).font(.caption).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Clear cache") { vm.clearCache(); cacheText = Self.cacheLine() }.buttonStyle(.bordered).font(.footnote)
-                    }.onAppear { cacheText = Self.cacheLine() }
-                }.padding()
-            }
-            .navigationTitle("Player")
+        PlayerLayout(state: layoutState, mode: $vm.mode, actions: actions) {
+            if let e = vm.engine, let pres = vm.presenter { MetalVideoView(engine: e, presenter: pres) }
+        }
+        .sheet(isPresented: $showVideoSource, onDismiss: runNext) {
+            VideoSourceSheet(photosItem: $videoItem, onFiles: { next = .files; showVideoSource = false }, onSaved: { next = .saved; showVideoSource = false })
+        }
+        .sheet(isPresented: $showFaceSource, onDismiss: runNext) {
+            FaceSourceSheet(photoItem: $srcItem, canSave: vm.canSaveSource, onLibrary: { next = .faces; showFaceSource = false }, onSave: { vm.saveSourceToLibrary() })
+        }
+        .sheet(isPresented: $showSettings) {
+            PlayerSettingsSheet(fastSwapper: $vm.fastSwapper, strength: $vm.strength, combo: $vm.combo, hasFast: ModelStore.hasPal8,
+                                costText: vm.costText, cacheText: cacheText, diagnostics: vm.diagnostics,
+                                onClearCache: { vm.clearCache(); cacheText = Self.cacheLine() }, onCopyDiagnostics: { UIPasteboard.general.string = vm.diagnostics })
         }
         .sheet(isPresented: $vm.showExportSheet, onDismiss: { vm.sheetDismissed() }) {
             if let plan = vm.exportPlan {
@@ -315,42 +304,26 @@ struct PlayerView: View {
             guard let item else { return }
             Task { if let d = try? await item.loadTransferable(type: Data.self) { vm.setSource(d) } }
         }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.movie, .mpeg4Movie]) { result in
-            guard case let .success(url) = result else { return }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            let dst = FileManager.default.temporaryDirectory.appendingPathComponent("video-\(UUID().uuidString).\(url.pathExtension)")
-            do { try FileManager.default.copyItem(at: url, to: dst); vm.importVideo(dst, source: "Files") } catch { vm.status = "Could not open that file: \(error.localizedDescription)" }
-        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.movie, .mpeg4Movie]) { result in importFile(result) }
         .onChange(of: scenePhase) { _, phase in vm.setActive(phase == .active) }
         .onDisappear { vm.setVisible(false) }   // switching tabs pauses playback and the swap workers
         .onAppear { vm.setVisible(true) }
     }
 
-    private var controls: some View {
-        VStack(spacing: 6) {
-            ZStack(alignment: .leading) {
-                GeometryReader { g in
-                    ForEach(Array(vm.ranges.enumerated()), id: \.offset) { _, r in
-                        let w = g.size.width, d = max(vm.duration, 0.001)
-                        Rectangle().fill(Color.green.opacity(0.55))
-                            .frame(width: max(2, w * (r.upperBound - r.lowerBound) / d), height: 6)
-                            .offset(x: w * r.lowerBound / d, y: g.size.height / 2 - 3)
-                    }
-                }.frame(height: 28)
-                Slider(value: Binding(get: { vm.time }, set: { vm.scrub($0) }), in: 0...max(vm.duration, 0.1)) { editing in
-                    if editing { vm.scrubbing = true } else { vm.endScrub() }
-                }
-            }
-            HStack {
-                Button { vm.togglePlay() } label: { Image(systemName: vm.playing ? "pause.fill" : "play.fill").font(.title2) }
-                Text(String(format: "%d:%02d / %d:%02d", Int(vm.time) / 60, Int(vm.time) % 60, Int(vm.duration) / 60, Int(vm.duration) % 60))
-                    .font(.system(.footnote, design: .monospaced))
-                Spacer()
-                Button("Export", systemImage: "square.and.arrow.up") { vm.openExportSheet() }
-                    .buttonStyle(.bordered).font(.footnote)
-            }
-        }
+    private func openSettings() { cacheText = Self.cacheLine(); showSettings = true }
+
+    /// A source sheet asked for another picker: open it once the sheet has finished dismissing.
+    private func runNext() {
+        let n = next; next = .none
+        switch n { case .files: importing = true; case .saved: showVideos = true; case .faces: showFaces = true; case .none: break }
+    }
+
+    private func importFile(_ result: Result<URL, Error>) {
+        guard case let .success(url) = result else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let dst = FileManager.default.temporaryDirectory.appendingPathComponent("video-\(UUID().uuidString).\(url.pathExtension)")
+        do { try FileManager.default.copyItem(at: url, to: dst); vm.importVideo(dst, source: "Files") } catch { vm.status = "Could not open that file: \(error.localizedDescription)" }
     }
 }
 

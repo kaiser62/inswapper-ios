@@ -12,7 +12,7 @@ struct InSwapBenchApp: App {
     }()
     var body: some Scene {
         WindowGroup {
-            if tab.hasPrefix("export-") { ExportPreview(kind: tab) } else {
+            if tab.hasPrefix("export-") { ExportPreview(kind: tab).preferredColorScheme(.dark) } else if tab.hasPrefix("player-") { PlayerPreview(kind: tab).preferredColorScheme(.dark) } else {
             TabView(selection: $tab) {
                 PhotoView().tabItem { Label("Photo", systemImage: "face.smiling") }.tag("photo")
                 FacesView().tabItem { Label("Faces", systemImage: "person.2.crop.square.stack") }.tag("faces")
@@ -20,6 +20,7 @@ struct InSwapBenchApp: App {
                 ContentView().tabItem { Label("Models & Bench", systemImage: "gauge") }.tag("bench")
                 LogsView().tabItem { Label("Logs", systemImage: "doc.plaintext") }.tag("logs")
             }
+            .preferredColorScheme(.dark).tint(Theme.accent)
             }
         }
     }
