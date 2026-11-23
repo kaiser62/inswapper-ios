@@ -4,14 +4,20 @@ import UniformTypeIdentifiers
 @main
 struct InSwapBenchApp: App {
     init() { AppLog.log("launch build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?") · \(ProcessInfo.processInfo.operatingSystemVersionString) · thermal \(ProcessInfo.processInfo.thermalState.rawValue)", "app") }
+    /// `-uiPreview <screen>` (CI screenshots, see .github/workflows/screenshots.yml) opens that tab at launch. Screens: photo faces player bench logs.
+    @State private var tab: String = {
+        let a = ProcessInfo.processInfo.arguments
+        if let i = a.firstIndex(of: "-uiPreview"), i + 1 < a.count { return a[i + 1] }
+        return "player"
+    }()
     var body: some Scene {
         WindowGroup {
-            TabView {
-                PhotoView().tabItem { Label("Photo", systemImage: "face.smiling") }
-                FacesView().tabItem { Label("Faces", systemImage: "person.2.crop.square.stack") }
-                PlayerView().tabItem { Label("Player", systemImage: "play.rectangle") }
-                ContentView().tabItem { Label("Models & Bench", systemImage: "gauge") }
-                LogsView().tabItem { Label("Logs", systemImage: "doc.plaintext") }
+            TabView(selection: $tab) {
+                PhotoView().tabItem { Label("Photo", systemImage: "face.smiling") }.tag("photo")
+                FacesView().tabItem { Label("Faces", systemImage: "person.2.crop.square.stack") }.tag("faces")
+                PlayerView().tabItem { Label("Player", systemImage: "play.rectangle") }.tag("player")
+                ContentView().tabItem { Label("Models & Bench", systemImage: "gauge") }.tag("bench")
+                LogsView().tabItem { Label("Logs", systemImage: "doc.plaintext") }.tag("logs")
             }
         }
     }

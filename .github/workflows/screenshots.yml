@@ -1,0 +1,64 @@
+name: screenshots
+# Builds the app for the iOS Simulator and captures one PNG per screen (default and largest Dynamic Type, light and dark).
+# View them with: gh run download <run id> -n ui-screenshots   (the repo is public: only placeholder content may appear)
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ["app/InSwapBench/**", ".github/workflows/screenshots.yml"]
+
+concurrency:
+  group: screenshots
+  cancel-in-progress: true
+
+jobs:
+  shots:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.3.app
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        working-directory: app
+        run: xcodegen generate
+      - name: Pick a 393 pt wide iPhone simulator
+        id: sim
+        run: |
+          xcrun simctl list devices available | grep -E "iPhone" || true
+          for n in "iPhone 16" "iPhone 15" "iPhone 15 Pro" "iPhone 16 Pro" "iPhone 17"; do
+            id=$(xcrun simctl list devices available | grep -E "^ +$n \(" | head -1 | sed -E 's/.*\(([0-9A-F-]{36})\).*/\1/')
+            if [ -n "$id" ]; then echo "udid=$id" >> "$GITHUB_OUTPUT"; echo "name=$n" >> "$GITHUB_OUTPUT"; break; fi
+          done
+      - name: Build for simulator
+        working-directory: app
+        run: |
+          set -o pipefail
+          xcodebuild build -project InSwapBench.xcodeproj -scheme InSwapBench -configuration Debug \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO | tail -n 30
+      - name: Boot, install, capture
+        run: |
+          U=${{ steps.sim.outputs.udid }}
+          mkdir -p shots
+          xcrun simctl boot "$U"; xcrun simctl bootstatus "$U" -b
+          xcrun simctl install "$U" "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/InSwapBench.app"
+          xcrun simctl status_bar "$U" override --time 9:41 --batteryState charged --batteryLevel 100 || true
+          shoot () {  # $1 file tag
+            for s in player photo faces bench logs; do
+              xcrun simctl launch --terminate-running-process "$U" dev.kaiser62.inswapbench -uiPreview $s >/dev/null
+              sleep 3
+              xcrun simctl io "$U" screenshot "shots/${s}_$1.png"
+            done
+          }
+          xcrun simctl ui "$U" appearance light;  xcrun simctl ui "$U" content_size large;                     shoot light
+          xcrun simctl ui "$U" appearance dark;                                                                shoot dark
+          xcrun simctl ui "$U" appearance light;  xcrun simctl ui "$U" content_size accessibility-extra-large; shoot xxl
+          ls -l shots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: shots
+          retention-days: 3
