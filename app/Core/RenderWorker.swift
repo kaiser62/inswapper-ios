@@ -12,9 +12,10 @@ final class RenderWorker {
     }
 
     /// Blocks until `until` seconds (or the end), cancelled, or an error. Frames already in the store are skipped.
-    func run(from start: Double, until: Double? = nil, cancel: CancelToken, onFrame: ((Int64) -> Void)? = nil) throws {
+    func run(from start: Double, until: Double? = nil, cancel: CancelToken, gate: (() -> Void)? = nil, onFrame: ((Int64) -> Void)? = nil) throws {
         let endUs = until.map { PatchStore.us($0) }
         try reader.read(from: start) { frame, pts in
+            gate?()   // pause / thermal throttle hook
             if cancel.isCancelled { return false }
             if let e = endUs, pts >= e { return false }
             if store.has(pts: pts) { return true }

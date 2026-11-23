@@ -13,10 +13,11 @@ final class MetalCompositor {
     }
 
     let device: MTLDevice
-    private let queue: MTLCommandQueue
+    let queue: MTLCommandQueue
     private let pso: MTLComputePipelineState
     private var cache: CVMetalTextureCache?
-    private var patchTex: MTLTexture
+    private var patchRing: [MTLTexture] = []
+    private var ringIndex = 0
     private var scratch: (w: Int, h: Int, tex: MTLTexture)?
 
     static let source = """
@@ -71,8 +72,7 @@ final class MetalCompositor {
         let d = MTLTextureDescriptor()
         d.textureType = .type2DArray; d.pixelFormat = .bgra8Unorm; d.width = 128; d.height = 128
         d.arrayLength = Self.maxPatches; d.usage = .shaderRead
-        guard let t = dev.makeTexture(descriptor: d) else { return nil }
-        patchTex = t
+        for _ in 0..<3 { guard let t = dev.makeTexture(descriptor: d) else { return nil }; patchRing.append(t) }
     }
 
     static func params(for p: SwapPatch, width w: Int, height h: Int) -> PatchParams? {
@@ -92,7 +92,7 @@ final class MetalCompositor {
                            x0: Int32(x0), y0: Int32(y0), x1: Int32(x1), y1: Int32(y1))
     }
 
-    private func texture(_ pb: CVPixelBuffer) -> (MTLTexture, CVMetalTexture)? {
+    func texture(_ pb: CVPixelBuffer) -> (MTLTexture, CVMetalTexture)? {
         var ct: CVMetalTexture?
         let (w, h) = PixelBuf.size(pb)
         guard let cache, CVMetalTextureCacheCreateTextureFromImage(nil, cache, pb, nil, .bgra8Unorm, w, h, 0, &ct) == kCVReturnSuccess,
@@ -106,6 +106,7 @@ final class MetalCompositor {
         var ps = use.compactMap { Self.params(for: $0, width: dst.width, height: dst.height) }
         var count = Int32(ps.count)
         if ps.isEmpty { ps = [PatchParams(m: (1, 0, 0, 0, 1, 0), scale: 1, erode: 0, isq2: 1, pad: 0, x0: 1, y0: 1, x1: 0, y1: 0)] }
+        let patchTex = patchRing[ringIndex % patchRing.count]; ringIndex += 1   // ring: a frame still in flight keeps its own patches
         // upload only the patches that survived (keeping index alignment with ps)
         var slot = 0
         for p in use where Self.params(for: p, width: dst.width, height: dst.height) != nil {

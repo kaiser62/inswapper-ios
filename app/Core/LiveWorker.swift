@@ -18,7 +18,7 @@ final class LiveWorker {
     }
 
     /// Blocks until cancelled. `playhead` returns the current playback time in seconds (thread-safe).
-    func run(playhead: () -> Double, cancel: CancelToken, onPatch: ((Int64) -> Void)? = nil) throws {
+    func run(playhead: () -> Double, cancel: CancelToken, gate: (() -> Void)? = nil, onPatch: ((Int64) -> Void)? = nil) throws {
         while !cancel.isCancelled {
             let begin = max(0, playhead() + latency)
             var ranToEnd = true
@@ -33,6 +33,8 @@ final class LiveWorker {
                     if pts <= target + reader.frameDurationUs / 2 { break }                               // due now
                     Thread.sleep(forTimeInterval: 0.01)                                                   // ahead: wait
                 }
+                gate?()
+                if cancel.isCancelled { ranToEnd = false; return false }
                 let t0 = Date()
                 let face = try pipeline.detect(frame).max { $0.area < $1.area }
                 store.put(pts: pts, face.map { [try? pipeline.swap(frame: frame, face: $0, latent: latent)].compactMap { $0 } } ?? [])
