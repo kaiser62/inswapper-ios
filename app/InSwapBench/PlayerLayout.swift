@@ -61,6 +61,9 @@ struct PlayerLayout<Video: View>: View {
             if !typeSize.isAccessibilitySize { exportBar }
         }
         .background(Theme.background)
+        .onChange(of: state.status) { _, new in
+            if !new.isEmpty { AccessibilityNotification.Announcement(new).post() }   // loading steps and errors are otherwise silent
+        }
     }
 
     private var exportBar: some View {

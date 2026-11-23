@@ -36,11 +36,18 @@ struct PlayerScrubber: View {
         .frame(height: Theme.hit)
         .accessibilityElement()
         .accessibilityLabel("Playback position")
-        .accessibilityValue("\(Self.clock(time)) of \(Self.clock(duration))")
+        .accessibilityValue("\(Self.clock(time)) of \(Self.clock(duration))\(renderedSummary)")
         .accessibilityAdjustableAction { dir in
             let step = 5.0
             onStart(); onScrub(min(duration, max(0, time + (dir == .increment ? step : -step)))); onEnd()
         }
+    }
+
+    /// The green ranges, in words (colour alone must not carry this).
+    private var renderedSummary: String {
+        guard !ranges.isEmpty, duration > 0 else { return "" }
+        let done = ranges.reduce(0) { $0 + ($1.upperBound - $1.lowerBound) }
+        return ", \(min(100, Int(done / duration * 100))) percent rendered"
     }
 
     static func clock(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
