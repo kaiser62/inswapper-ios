@@ -17,3 +17,8 @@ enum Theme {
 
     static let spring = Animation.snappy(duration: 0.28)
 }
+
+extension View {
+    /// Dark scheme and the accent tint: sheets and covers do not always inherit them from the root.
+    func themed() -> some View { tint(Theme.accent).preferredColorScheme(.dark) }
+}

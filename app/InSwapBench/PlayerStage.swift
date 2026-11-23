@@ -14,8 +14,6 @@ struct PlayerStage<Video: View>: View {
             } else {
                 ContentUnavailableView {
                     Label("No video yet", systemImage: "film")
-                } description: {
-                    Text("Choose a video and a face to start.")
                 } actions: {
                     Button("Choose video", action: actions.chooseVideo).buttonStyle(.borderedProminent).tint(Theme.accent)
                 }
@@ -35,6 +33,7 @@ struct PlayerStage<Video: View>: View {
                 .padding(Theme.gap)
             }
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .containerRelativeFrame(.vertical) { h, _ in h * 0.44 }
         .clipShape(.rect(cornerRadius: Theme.radius))
         .padding(.horizontal, Theme.pad)

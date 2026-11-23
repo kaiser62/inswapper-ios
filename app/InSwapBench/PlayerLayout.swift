@@ -32,13 +32,15 @@ struct PlayerLayout<Video: View>: View {
     @Binding var mode: PlayMode
     let actions: PlayerLayoutActions
     @ViewBuilder let video: () -> Video
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(spacing: Theme.gap) {
             PlayerStage(state: state, actions: actions, video: video)
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.gap) {
-                    HStack(spacing: Theme.gap) {
+                    let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: Theme.gap)) : AnyLayout(HStackLayout(spacing: Theme.gap))
+                    layout {
                         Button(action: actions.chooseVideo) {
                             SourceChip(title: "Video", detail: state.videoDetail ?? "Choose", systemImage: "film")
                         }
@@ -52,9 +54,16 @@ struct PlayerLayout<Video: View>: View {
                         Label(state.status, systemImage: state.busy ? "hourglass" : "info.circle")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
+                    if typeSize.isAccessibilitySize { exportBar.padding(.horizontal, -Theme.pad) }
                 }
                 .padding(.horizontal, Theme.pad)
             }
+            if !typeSize.isAccessibilitySize { exportBar }
+        }
+        .background(Theme.background)
+    }
+
+    private var exportBar: some View {
             HStack(spacing: Theme.gap) {
                 Button("Export video", systemImage: "square.and.arrow.up", action: actions.export)
                     .buttonStyle(PrimaryButtonStyle())
@@ -65,7 +74,5 @@ struct PlayerLayout<Video: View>: View {
                     .buttonStyle(SoftButtonStyle())
             }
             .padding(.horizontal, Theme.pad)
-        }
-        .background(Theme.background)
     }
 }

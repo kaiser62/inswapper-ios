@@ -277,25 +277,25 @@ struct PlayerView: View {
             if let e = vm.engine, let pres = vm.presenter { MetalVideoView(engine: e, presenter: pres) }
         }
         .sheet(isPresented: $showVideoSource, onDismiss: runNext) {
-            VideoSourceSheet(photosItem: $videoItem, onFiles: { next = .files; showVideoSource = false }, onSaved: { next = .saved; showVideoSource = false })
+            VideoSourceSheet(photosItem: $videoItem, onFiles: { next = .files; showVideoSource = false }, onSaved: { next = .saved; showVideoSource = false }).themed()
         }
         .sheet(isPresented: $showFaceSource, onDismiss: runNext) {
-            FaceSourceSheet(photoItem: $srcItem, canSave: vm.canSaveSource, onLibrary: { next = .faces; showFaceSource = false }, onSave: { vm.saveSourceToLibrary() })
+            FaceSourceSheet(photoItem: $srcItem, canSave: vm.canSaveSource, onLibrary: { next = .faces; showFaceSource = false }, onSave: { vm.saveSourceToLibrary() }).themed()
         }
         .sheet(isPresented: $showSettings) {
             PlayerSettingsSheet(fastSwapper: $vm.fastSwapper, strength: $vm.strength, combo: $vm.combo, hasFast: ModelStore.hasPal8,
                                 costText: vm.costText, cacheText: cacheText, diagnostics: vm.diagnostics,
-                                onClearCache: { vm.clearCache(); cacheText = Self.cacheLine() }, onCopyDiagnostics: { UIPasteboard.general.string = vm.diagnostics })
+                                onClearCache: { vm.clearCache(); cacheText = Self.cacheLine() }, onCopyDiagnostics: { UIPasteboard.general.string = vm.diagnostics }).themed()
         }
         .sheet(isPresented: $vm.showExportSheet, onDismiss: { vm.sheetDismissed() }) {
             if let plan = vm.exportPlan {
                 ExportSheet(plan: plan, duration: vm.duration, swapsPerSecond: vm.exportSwapsPerSecond, strength: vm.strength,
-                            swapperName: vm.swapperName, freeBytes: vm.exportFreeBytes) { vm.requestExportStart() }
+                            swapperName: vm.swapperName, freeBytes: vm.exportFreeBytes) { vm.requestExportStart() }.themed()
             }
         }
-        .fullScreenCover(isPresented: $vm.showExportProgress) { ExportProgressView(session: vm.export) { vm.endExport() } }
-        .sheet(isPresented: $showVideos) { VideoLibrarySheet { vm.setLibraryVideo($0) } }
-        .sheet(isPresented: $showFaces) { FacePickerSheet { vm.setLibraryFace($0) } }
+        .fullScreenCover(isPresented: $vm.showExportProgress) { ExportProgressView(session: vm.export) { vm.endExport() }.themed() }
+        .sheet(isPresented: $showVideos) { VideoLibrarySheet { vm.setLibraryVideo($0) }.themed() }
+        .sheet(isPresented: $showFaces) { FacePickerSheet { vm.setLibraryFace($0) }.themed() }
         .onChange(of: videoItem) { _, item in
             guard let item else { return }
             Task { if let m = try? await item.loadTransferable(type: MovieFile.self) { vm.importVideo(m.url, source: "Photos") } else { vm.status = "Could not load that video." } }
