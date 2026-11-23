@@ -100,3 +100,13 @@ Sustained 60 s (scrfd + swapper every frame, ANE): 6.6 fps flat, thermal nominal
 ## Device result: video works (2026-11-23, build 29)
 - After uninstall + reinstall + re-import models the Player shows video, Mode B ~6.4 swaps/s, Mode A renders ahead (6.5/s) and seeks restart correctly. (Unclear whether the drawableSize fix or the clean install fixed the black screen; both changed.)
 - Log findings: (1) GPU submits while app inactive -> 36 BackgroundExecutionNotPermitted errors + render reader "Operation Interrupted" (retry recovered). Fix: tick() returns unless applicationState == .active. (2) Display redrew identical frames at 25-60/s when paused: now skipped via content key. (3) Thermal SERIOUS after ~2 min of continuous use; swaps fall from 6.4 to ~2.4/s (gate sleeps 150 ms/frame at serious). Sustained Mode A/B is thermally limited; user-visible rate depends on the phone staying cool. (4) Log snapshot interval 2 s -> 10 s.
+
+## ROADMAP (2026-11-23, user: "plan for all and continue working, advisor check in every major task")
+Order (each task: implement -> Mac harness/ci-tests where possible -> push (CI) -> advisor check -> log here):
+- R1 Cache management: size cap (default 2 GB, evict oldest-used cache dirs), size readout, "Clear cache" button, Player tab + Logs.
+- R2 Face library (spec 06 B): FaceLibrary store (latent + thumbnail, no photo), multi-photo averaging (avg L2-norm ArcFace embeddings before emap), grid picker used by Photo tab and Player; rename/delete.
+- R3 Video library + direct-URL ingest (spec 06 A): URLSession download with progress/cancel/disk check, validation, library list (thumb, size, delete), Player source from library.
+- R4 Strength (Mode A + export only): N passes in RenderWorker, cost estimate in UI, store identity includes strength.
+- R5 Phase 3 export: AVAssetReader -> swapped patches (cache or render) -> Metal composite -> AVAssetWriter (HEVC/H.264) + audio passthrough, progress/cancel, save to Photos.
+- R6 Polish subset: model management (sizes/delete), thermal-aware rate message in UI, README with install steps; multi-face mapping only if time.
+Thermal note: sustained use hits SERIOUS in ~2 min; no code fix planned beyond not wasting GPU; show thermal state clearly.
