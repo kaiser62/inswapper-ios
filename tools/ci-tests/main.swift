@@ -1,6 +1,7 @@
 // Synthetic unit tests for app/Core (no face data, no models). Run in CI and locally:
 //   swiftc app/Core/*.swift tools/ci-tests/main.swift -o build/coretests && build/coretests
 import CoreVideo
+import Metal
 import Foundation
 
 var failures = 0
@@ -101,6 +102,34 @@ check(ps.latest(atOrBefore: 80_000) != nil && ps.latest(atOrBefore: -1) == nil, 
 let rr = ps.renderedRanges()
 check(rr.count == 2 && rr[0] == 0...120_000 && rr[1] == 400_000...480_000, "PatchStore: rendered ranges join adjacent frames")
 let ct = CancelToken(); check(!ct.isCancelled, "CancelToken initial"); ct.cancel(); check(ct.isCancelled, "CancelToken cancelled")
+
+// Metal compositor vs CPU compositor (skipped when the machine has no Metal device)
+func psnr(_ a: CVPixelBuffer, _ b: CVPixelBuffer) -> Double {
+    var se = 0.0, n = 0
+    PixelBuf.withBytes(a) { pa, w, h, ba in PixelBuf.withBytes(b) { pb, _, _, bb in
+        for y in 0..<h { for x in 0..<w { for c in 0..<3 { let d = Double(pa[y * ba + x * 4 + c]) - Double(pb[y * bb + x * 4 + c]); se += d * d; n += 1 } } }
+    } }
+    return se == 0 ? 99 : 10 * log10(255 * 255 / (se / Double(n)))
+}
+if let mc = MetalCompositor() {
+    var rng = SystemRandomNumberGenerator()
+    var noise = [UInt8](); for i in 0..<(128 * 128) { noise += [UInt8((i % 128) * 2), UInt8((i / 128) * 2), UInt8.random(in: 0...255, using: &rng)] }
+    let big = solid(640, 480, 90)
+    PixelBuf.withBytes(big, readOnly: false) { b, w, h, bpr in for y in 0..<h { for x in 0..<w { b[y * bpr + x * 4] = UInt8(x % 251); b[y * bpr + x * 4 + 1] = UInt8(y % 241) } } }
+    func M(_ s: Double, _ th: Double, _ cx: Double, _ cy: Double) -> Affine {  // frame->patch for a face of scale s at (cx,cy)
+        let ca = s * cos(th), sa = s * sin(th)
+        return Affine(a: ca, b: -sa, tx: 64 - (ca * cx - sa * cy), c: sa, d: ca, ty: 64 - (sa * cx + ca * cy))
+    }
+    let cases: [(String, [Affine])] = [("upright", [M(0.8, 0, 300, 220)]), ("rotated 30deg", [M(0.6, 0.52, 320, 240)]),
+                                       ("small", [M(2.0, -0.2, 100, 100)]), ("partly off-frame", [M(0.7, 0.1, 20, 460)]),
+                                       ("two faces", [M(0.8, 0.2, 150, 150), M(1.1, -0.4, 450, 300)])]
+    for (name, ms) in cases {
+        let ps = ms.map { SwapPatch(bgr: noise, M: $0) }
+        let cpu = try! Compositor.composite(big, patches: ps), gpu = try! mc.composite(big, patches: ps)
+        let v = psnr(cpu, gpu)
+        check(v > 45, "Metal vs CPU compositor (\(name)): \(String(format: "%.1f", v)) dB")
+    }
+} else { print("skip: no Metal device, Metal compositor tests not run") }
 
 print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)
