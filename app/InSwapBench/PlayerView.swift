@@ -36,6 +36,17 @@ final class PlayerVM: ObservableObject {
     @Published var sourceImage: CGImage?
     @Published var mode = PlayMode.livePreview { didSet { engine?.mode = mode } }
     @Published var combo = false { didSet { engine?.combo = combo } }
+    /// Swap strength for Mode A (VisoMaster style: 100 = 1 pass, 150 = 2 passes half-blended, 200 = 2, 300 = 3). Live preview always uses 1.
+    @Published var strength: Int = { let v = UserDefaults.standard.integer(forKey: "strength"); return v == 0 ? 100 : v }() {
+        didSet { UserDefaults.standard.set(strength, forKey: "strength"); if strength != oldValue, engine != nil { prepare() } }
+    }
+    var costText: String {
+        guard let e = engine else { return "" }
+        let passes = (strength + 99) / 100
+        let fps = 1 / max(0.001, e.reader.frameDuration.seconds)
+        let minPerMin = fps / (6.5 / Double(passes))    // swaps/s on a cool phone (about 2.5 when hot)
+        return String(format: "≈ %.1f min of rendering per minute of video on a cool phone (about 2.5x slower when hot)", minPerMin)
+    }
     @Published var time = 0.0
     @Published var duration = 0.0
     @Published var playing = false
@@ -107,12 +118,12 @@ final class PlayerVM: ObservableObject {
                 let pipe = try await SharedPipeline.get()
                 status = "Opening video…"
                 let reader = try await VideoReader(url: url)
-                let identity = "\(Self.videoID(url))|\(FaceLibrary.fingerprint(latent))|\(reader.width)x\(reader.height)"
+                let identity = "\(Self.videoID(url))|\(FaceLibrary.fingerprint(latent))|\(reader.width)x\(reader.height)" + (strength == 100 ? "" : "|s\(strength)")
                 let dir = AppData.patchCacheRoot.appendingPathComponent(Self.hash(Data(identity.utf8)))
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 CacheManager.touch(dir)
                 CacheManager.enforce(root: AppData.patchCacheRoot, capBytes: AppData.cacheCapBytes, keep: dir)
-                let e = PlayerEngine(pipeline: pipe, reader: reader, latent: latent, cacheDirectory: dir, identity: identity)
+                let e = PlayerEngine(pipeline: pipe, reader: reader, latent: latent, strength: strength, cacheDirectory: dir, identity: identity)
                 e.mode = mode; e.combo = combo
                 duration = reader.duration; engine = e
                 e.start()
@@ -224,6 +235,10 @@ struct PlayerView: View {
                         Text("B  Live preview").tag(PlayMode.livePreview)
                     }.pickerStyle(.segmented)
                     if vm.mode == .renderAhead {
+                        Picker("Strength", selection: $vm.strength) {
+                            Text("100").tag(100); Text("150").tag(150); Text("200").tag(200); Text("300").tag(300)
+                        }.pickerStyle(.segmented)
+                        Text("Strength \(vm.strength): \((vm.strength + 99) / 100) swap pass\(vm.strength > 100 ? "es" : ""). Higher copies the source identity more strongly but renders slower. \(vm.costText)").font(.caption).foregroundStyle(.secondary)
                         Toggle("A + B fallback (live preview where not rendered yet)", isOn: $vm.combo).font(.footnote)
                         Text("A swaps every frame from the playhead in the background (about 3-5 min of work per minute of video) and shows the green parts of the bar fully swapped. Unrendered parts play raw. Cached on disk per video and face.")
                             .font(.caption).foregroundStyle(.secondary)

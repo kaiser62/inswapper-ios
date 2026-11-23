@@ -12,7 +12,7 @@ struct EngineStats { var swapsPerSecond = 0.0, latencyMs = 0.0, cachedFrames = 0
 ///  - B (livePreview): LiveWorker swaps ahead of the playhead; display pastes the newest patch at its own M.
 ///  - combo: A, with B filling frames A has not rendered yet.
 final class PlayerEngine {
-    let pipeline: FacePipeline, reader: VideoReader, latent: [Float]
+    let pipeline: FacePipeline, reader: VideoReader, latent: [Float], strength: Int
     let player: AVPlayer
     private let output: AVPlayerItemVideoOutput
     let renderStore: PatchStore, liveStore: PatchStore
@@ -36,8 +36,8 @@ final class PlayerEngine {
         return "item \(st)\(it.error.map { " (\($0.localizedDescription))" } ?? "") · size \(Int(it.presentationSize.width))x\(Int(it.presentationSize.height)) · hdr \(reader.isHDR)"
     }
 
-    init(pipeline: FacePipeline, reader: VideoReader, latent: [Float], cacheDirectory: URL?, identity: String) {
-        self.pipeline = pipeline; self.reader = reader; self.latent = latent; self.cacheDirectory = cacheDirectory
+    init(pipeline: FacePipeline, reader: VideoReader, latent: [Float], strength: Int = 100, cacheDirectory: URL?, identity: String) {
+        self.pipeline = pipeline; self.reader = reader; self.latent = latent; self.strength = strength; self.cacheDirectory = cacheDirectory
         renderStore = PatchStore(frameDurationUs: reader.frameDurationUs)
         liveStore = PatchStore(frameDurationUs: reader.frameDurationUs)
         if let d = cacheDirectory { renderStore.attach(directory: d, identity: identity) }
@@ -110,7 +110,7 @@ final class PlayerEngine {
     private func restartRender(from t: Double) {
         renderToken.cancel()
         let token = CancelToken(); renderToken = token
-        let worker = RenderWorker(pipeline: pipeline, reader: reader, store: renderStore, latent: latent)
+        let worker = RenderWorker(pipeline: pipeline, reader: reader, store: renderStore, latent: latent, strength: strength)
         renderQueue.async { [weak self] in
             guard let self, !token.isCancelled else { return }
             var attempts = 0, sinceFlush = 0, from = t

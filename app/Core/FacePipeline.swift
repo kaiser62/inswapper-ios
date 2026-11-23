@@ -123,9 +123,8 @@ final class FacePipeline {
     }
 
     // MARK: swap
-    func swap(frame: CVPixelBuffer, face: DetectedFace, latent: [Float]) throws -> SwapPatch {
-        let M = FaceAlign.estimate(landmarks: face.landmarks, size: 128)
-        let crop = try timed("warp") { try PixelBuf.warp(frame, M: M, size: 128) }
+    /// One swapper pass on a 128x128 BGRA crop -> interleaved BGR bytes (truncating, like astype(uint8)).
+    private func swapPass(crop: CVPixelBuffer, latent: [Float]) throws -> [UInt8] {
         let lat = try MLMultiArray(shape: latentShape, dataType: .float32)
         for i in 0..<512 { lat[i] = NSNumber(value: latent[i]) }
         let out = try timed("swapper") { try swapper.prediction(from: MLDictionaryFeatureProvider(dictionary: [
@@ -134,11 +133,55 @@ final class FacePipeline {
         else { throw PipelineError.badModel("swapped") }
         var bgr = [UInt8](repeating: 0, count: 128 * 128 * 3)
         let plane = 128 * 128
-        for i in 0..<plane {  // planar RGB 0..1 -> interleaved BGR bytes (truncating, like astype(uint8))
+        for i in 0..<plane {  // planar RGB 0..1 -> interleaved BGR bytes
             for c in 0..<3 {
                 bgr[i * 3 + c] = UInt8(max(0, min(255, 255 * p[(2 - c) * plane + i])))
             }
         }
-        return SwapPatch(bgr: bgr, M: M)
+        return bgr
+    }
+
+    /// Interleaved BGR bytes of a 128x128 BGRA crop (the swapper's input), for blending.
+    private static func bgrBytes(of crop: CVPixelBuffer) -> [UInt8] {
+        var out = [UInt8](repeating: 0, count: 128 * 128 * 3)
+        PixelBuf.withBytes(crop) { b, _, _, bpr in
+            for y in 0..<128 { for x in 0..<128 { for c in 0..<3 { out[(y * 128 + x) * 3 + c] = b[y * bpr + x * 4 + c] } } }
+        }
+        return out
+    }
+
+    private static func cropBuffer(fromBGR bgr: [UInt8]) throws -> CVPixelBuffer {
+        let pb = try PixelBuf.make(width: 128, height: 128)
+        PixelBuf.withBytes(pb, readOnly: false) { b, _, _, bpr in
+            for y in 0..<128 { for x in 0..<128 {
+                for c in 0..<3 { b[y * bpr + x * 4 + c] = bgr[(y * 128 + x) * 3 + c] }
+                b[y * bpr + x * 4 + 3] = 255
+            } }
+        }
+        return pb
+    }
+
+    /// `strength` follows VisoMaster: ceil(S/100) swapper passes (each pass feeds on the previous output, same latent),
+    /// and a final blend alpha = (S mod 100)/100 between the last output and its input (1 when S is a multiple of 100).
+    /// strength 100 is exactly one plain pass. Cost = passes x ~130-150 ms.
+    func swap(frame: CVPixelBuffer, face: DetectedFace, latent: [Float], strength: Int = 100) throws -> SwapPatch {
+        let M = FaceAlign.estimate(landmarks: face.landmarks, size: 128)
+        let crop = try timed("warp") { try PixelBuf.warp(frame, M: M, size: 128) }
+        let passes = max(1, (max(1, strength) + 99) / 100)
+        let rem = strength % 100
+        let alpha = rem == 0 ? 1.0 : Double(rem) / 100
+        var prevCrop = crop
+        var out = try swapPass(crop: crop, latent: latent)
+        if passes > 1 {
+            for _ in 2...passes {
+                prevCrop = try Self.cropBuffer(fromBGR: out)
+                out = try swapPass(crop: prevCrop, latent: latent)
+            }
+        }
+        if alpha < 1 {
+            let before = passes == 1 ? Self.bgrBytes(of: crop) : Self.bgrBytes(of: prevCrop)
+            for i in 0..<out.count { out[i] = UInt8(max(0, min(255, Double(before[i]) * (1 - alpha) + Double(out[i]) * alpha))) }
+        }
+        return SwapPatch(bgr: out, M: M)
     }
 }

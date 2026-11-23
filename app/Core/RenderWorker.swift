@@ -4,11 +4,11 @@ import Foundation
 /// Mode A background renderer: from a start time, swap every frame and store the patches. Run on a background thread.
 /// One source latent, the largest face in each frame (multi-face policy comes later).
 final class RenderWorker {
-    let pipeline: FacePipeline, reader: VideoReader, store: PatchStore, latent: [Float]
+    let pipeline: FacePipeline, reader: VideoReader, store: PatchStore, latent: [Float], strength: Int
     private(set) var framesDone = 0
 
-    init(pipeline: FacePipeline, reader: VideoReader, store: PatchStore, latent: [Float]) {
-        self.pipeline = pipeline; self.reader = reader; self.store = store; self.latent = latent
+    init(pipeline: FacePipeline, reader: VideoReader, store: PatchStore, latent: [Float], strength: Int = 100) {
+        self.pipeline = pipeline; self.reader = reader; self.store = store; self.latent = latent; self.strength = strength
     }
 
     /// Blocks until `until` seconds (or the end), cancelled, or an error. Frames already in the store are skipped.
@@ -24,7 +24,7 @@ final class RenderWorker {
             if let e = endUs, pts >= e { return false }
             if store.has(pts: pts) { return true }
             let face = try pipeline.detect(frame).max { $0.area < $1.area }
-            pending = (pts, try face.map { [try pipeline.swap(frame: frame, face: $0, latent: latent)] } ?? [])
+            pending = (pts, try face.map { [try pipeline.swap(frame: frame, face: $0, latent: latent, strength: strength)] } ?? [])
             framesDone += 1
             onFrame?(pts)
             return true
