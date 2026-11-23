@@ -60,6 +60,19 @@ final class PhotoVM: ObservableObject {
     }
 
     // MARK: source
+    /// A saved library face as the source.
+    func setLibraryFace(_ e: FaceLibrary.Entry) {
+        guard !busy else { return }
+        Task {
+            do {
+                let p = try await pipeline()
+                guard let lat = FaceStore.shared.latent(id: e.id, pipeline: p) else { status = "Could not load that face."; return }
+                latent = lat; sourceImage = FaceStore.shared.thumbnail(e.id)?.cgImage
+                status = "Source face ready (\(e.name))."
+            } catch { status = "Source failed: \(error.localizedDescription)" }
+        }
+    }
+
     func setSource(_ data: Data) {
         guard !busy else { return }
         busy = true; latent = nil
@@ -211,6 +224,7 @@ struct PhotoView: View {
     @State private var tgtItems: [PhotosPickerItem] = []
     @State private var installed = ModelStore.isInstalled
     @State private var viewer: ViewerStart?
+    @State private var showFaces = false
 
     var body: some View {
         NavigationStack {
@@ -222,6 +236,7 @@ struct PhotoView: View {
                     HStack {
                         PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square") }
                             .buttonStyle(.bordered)
+                        Button { showFaces = true } label: { Label("Library", systemImage: "person.2") }.buttonStyle(.bordered)
                         PhotosPicker(selection: $tgtItems, maxSelectionCount: 12, matching: .images) { Label("Target photos", systemImage: "photo.stack") }
                             .buttonStyle(.bordered)
                     }
@@ -258,6 +273,7 @@ struct PhotoView: View {
             }
             .navigationTitle("InSwap")
         }
+        .sheet(isPresented: $showFaces) { FacePickerSheet { vm.setLibraryFace($0) } }
         .fullScreenCover(item: $viewer) { start in ResultViewer(vm: vm, index: start.index) }
         .onAppear { installed = ModelStore.isInstalled }
         .onChange(of: srcItem) { _, item in

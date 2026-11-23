@@ -44,7 +44,7 @@ final class PlayerVM: ObservableObject {
     @Published var scrubbing = false
     let presenter = MetalPresenter()
 
-    private var videoURL: URL?, sourceData: Data?
+    private var videoURL: URL?, sourceLatent: [Float]?, sourceEmbedding: [Float]?, sourceThumb: Data?
     private var timer: Timer?
     private var needsPrepare = false, logTick = 0
     private var active = true, visible = true
@@ -52,10 +52,40 @@ final class PlayerVM: ObservableObject {
     static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
 
     func setVideo(_ url: URL) { AppLog.log("video picked \(url.lastPathComponent)", "player"); videoURL = url; prepare() }
-    func setSource(_ data: Data) { AppLog.log("source photo picked \(data.count) bytes", "player"); sourceData = data; sourceImage = ImageFile.cgImage(data: data, maxSide: 200); prepare() }
+    /// A source photo: detect, embed, derive the latent (also kept so it can be saved to the library).
+    func setSource(_ data: Data) {
+        AppLog.log("source photo picked \(data.count) bytes", "player")
+        status = "Analysing source face…"
+        Task {
+            do {
+                let pipe = try await SharedPipeline.get()
+                let r = try await Task.detached(priority: .userInitiated) { Box(v: try FaceIngest.embed(photo: data, pipeline: pipe)) }.value.v
+                sourceEmbedding = r.embedding; sourceThumb = r.thumb
+                sourceLatent = pipe.latent(fromEmbedding: r.embedding)
+                sourceImage = ImageFile.cgImage(data: data, maxSide: 200)
+                prepare()
+            } catch PipelineError.noFace { status = "No face found in the source photo." }
+            catch { status = "Source failed: \(error.localizedDescription)" }
+        }
+    }
+    /// A saved library face.
+    func setLibraryFace(_ e: FaceLibrary.Entry) {
+        Task {
+            guard let pipe = try? await SharedPipeline.get(), let lat = FaceStore.shared.latent(id: e.id, pipeline: pipe) else { status = "Could not load that face."; return }
+            AppLog.log("library face \(e.name)", "player")
+            sourceLatent = lat; sourceEmbedding = nil; sourceThumb = nil
+            sourceImage = FaceStore.shared.thumbnail(e.id)?.cgImage
+            prepare()
+        }
+    }
+    func saveSourceToLibrary() {
+        guard let e = sourceEmbedding else { return }
+        let n = FaceStore.shared.add(name: "Face \(FaceStore.shared.entries.count + 1)", embedding: e, thumb: sourceThumb)
+        status = "Saved to library as \(n.name)."; sourceEmbedding = nil
+    }
 
     private func prepare() {
-        guard let url = videoURL, let data = sourceData else { return }
+        guard let url = videoURL, let latent = sourceLatent else { return }
         if busy { needsPrepare = true; return }   // a pick made while loading is applied when this finishes
         busy = true
         engine?.shutdown(); engine = nil; timer?.invalidate()
@@ -66,17 +96,12 @@ final class PlayerVM: ObservableObject {
                 try? AVAudioSession.sharedInstance().setActive(true)
                 status = "Loading models (first load compiles for the Neural Engine and can take a while)…"
                 let pipe = try await SharedPipeline.get()
-                status = "Analysing source face…"
-                let latent = try await Task.detached(priority: .userInitiated) { () -> Box<[Float]> in
-                    let buf = try PixelBuf.load(data: data)
-                    guard let f = try pipe.detect(buf).max(by: { $0.area < $1.area }) else { throw PipelineError.noFace }
-                    return Box(v: try pipe.latent(forSource: buf, face: f))
-                }.value.v
                 status = "Opening video…"
                 let reader = try await VideoReader(url: url)
-                let identity = "\(Self.videoID(url))|\(Self.hash(data))|\(reader.width)x\(reader.height)"
-                let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                    .appendingPathComponent("patchcache/\(Self.hash(Data(identity.utf8)))")
+                let identity = "\(Self.videoID(url))|\(FaceLibrary.fingerprint(latent))|\(reader.width)x\(reader.height)"
+                let dir = AppData.patchCacheRoot.appendingPathComponent(Self.hash(Data(identity.utf8)))
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                CacheManager.enforce(root: AppData.patchCacheRoot, capBytes: AppData.cacheCapBytes, keep: dir)
                 let e = PlayerEngine(pipeline: pipe, reader: reader, latent: latent, cacheDirectory: dir, identity: identity)
                 e.mode = mode; e.combo = combo
                 duration = reader.duration; engine = e
@@ -117,6 +142,13 @@ final class PlayerVM: ObservableObject {
             + "\nlast error: \(s.lastError ?? "none")\nstatus: \(status)"
     }
 
+    var canSaveSource: Bool { sourceEmbedding != nil }
+    /// Removes every cached render except the video currently open.
+    func clearCache() {
+        let keep = engine?.cacheDirectoryURL
+        let freed = CacheManager.clear(root: AppData.patchCacheRoot, keep: keep)
+        AppLog.log("cache cleared, freed \(freed / 1_000_000) MB", "player")
+    }
     func togglePlay() { guard let e = engine else { return }; AppLog.log(e.isPlaying ? "pause" : "play", "player"); if e.isPlaying { e.pause() } else { e.play() }; playing = e.isPlaying }
     func scrub(_ t: Double) { time = t; engine?.scrub(to: t) }
     func endScrub() { AppLog.log("seek to \(String(format: "%.2f", time))", "player"); scrubbing = false; engine?.seek(to: time) }
@@ -144,11 +176,17 @@ final class PlayerVM: ObservableObject {
 }
 
 struct PlayerView: View {
+    static func cacheLine() -> String {
+        let b = CacheManager.totalBytes(root: AppData.patchCacheRoot)
+        return String(format: "Render cache %.0f MB (cap %.1f GB)", Double(b) / 1e6, Double(AppData.cacheCapBytes) / 1e9)
+    }
     @StateObject private var vm = PlayerVM()
     @Environment(\.scenePhase) private var scenePhase
     @State private var videoItem: PhotosPickerItem?
     @State private var srcItem: PhotosPickerItem?
     @State private var importing = false
+    @State private var showFaces = false
+    @State private var cacheText = ""
 
     var body: some View {
         NavigationStack {
@@ -158,8 +196,10 @@ struct PlayerView: View {
                         PhotosPicker(selection: $videoItem, matching: .videos, preferredItemEncoding: .current) { Label("Video", systemImage: "film") }.buttonStyle(.bordered)
                         Button { importing = true } label: { Label("File", systemImage: "folder") }.buttonStyle(.bordered)
                         PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square") }.buttonStyle(.bordered)
+                        Button { showFaces = true } label: { Label("Library", systemImage: "person.2") }.buttonStyle(.bordered)
                         if let img = vm.sourceImage { Image(decorative: img, scale: 1).resizable().scaledToFill().frame(width: 36, height: 36).clipShape(Circle()) }
                     }
+                    if vm.canSaveSource { Button("Save this face to library") { vm.saveSourceToLibrary() }.font(.footnote) }
                     Text(vm.status).font(.footnote).foregroundStyle(.secondary)
                     if let e = vm.engine, let pres = vm.presenter {
                         MetalVideoView(engine: e, presenter: pres)
@@ -183,10 +223,16 @@ struct PlayerView: View {
                         Text(vm.diagnostics).font(.system(.caption2, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
                         Button("Copy diagnostics") { UIPasteboard.general.string = vm.diagnostics }.buttonStyle(.bordered).font(.footnote)
                     }
+                    HStack {
+                        Text(cacheText).font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Clear cache") { vm.clearCache(); cacheText = Self.cacheLine() }.buttonStyle(.bordered).font(.footnote)
+                    }.onAppear { cacheText = Self.cacheLine() }
                 }.padding()
             }
             .navigationTitle("Player")
         }
+        .sheet(isPresented: $showFaces) { FacePickerSheet { vm.setLibraryFace($0) } }
         .onChange(of: videoItem) { _, item in
             guard let item else { return }
             Task { if let m = try? await item.loadTransferable(type: MovieFile.self) { vm.setVideo(m.url) } else { vm.status = "Could not load that video." } }

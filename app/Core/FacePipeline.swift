@@ -97,19 +97,26 @@ final class FacePipeline {
     }
 
     // MARK: source identity
-    /// latent = L2norm( L2norm(arcface(aligned112)) @ emap ), computed once per source face.
-    func latent(forSource frame: CVPixelBuffer, face: DetectedFace) throws -> [Float] {
+    /// L2-normalised ArcFace embedding (512) of one source face. Kept separate so several photos can be averaged.
+    func embedding(forSource frame: CVPixelBuffer, face: DetectedFace) throws -> [Float] {
         let M = FaceAlign.estimate(landmarks: face.landmarks, size: 112)
         let crop = try timed("warp") { try PixelBuf.warp(frame, M: M, size: 112) }
         let out = try timed("arcface") { try arcface.prediction(from: MLDictionaryFeatureProvider(dictionary: ["face": MLFeatureValue(pixelBuffer: crop)])) }
-        guard var e = out.featureValue(for: "embedding")?.multiArrayValue?.toFloats(), e.count == 512
+        guard let e = out.featureValue(for: "embedding")?.multiArrayValue?.toFloats(), e.count == 512
         else { throw PipelineError.badModel("embedding") }
-        let n0 = e.reduce(0) { $0 + $1 * $1 }.squareRoot()
-        e = e.map { $0 / n0 }
+        return FaceLibrary.normalised(e)
+    }
+
+    /// latent = L2norm( emb @ emap ) for an already L2-normalised (possibly averaged) embedding.
+    func latent(fromEmbedding e: [Float]) -> [Float] {
         var lat = [Float](repeating: 0, count: 512)
         for i in 0..<512 { let v = e[i]; for j in 0..<512 { lat[j] += v * emap[i * 512 + j] } }
-        let n1 = lat.reduce(0) { $0 + $1 * $1 }.squareRoot()
-        return lat.map { $0 / n1 }
+        return FaceLibrary.normalised(lat)
+    }
+
+    /// latent = L2norm( L2norm(arcface(aligned112)) @ emap ), computed once per source face.
+    func latent(forSource frame: CVPixelBuffer, face: DetectedFace) throws -> [Float] {
+        latent(fromEmbedding: try embedding(forSource: frame, face: face))
     }
 
     // MARK: swap

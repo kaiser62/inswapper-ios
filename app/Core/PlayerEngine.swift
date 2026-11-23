@@ -17,6 +17,7 @@ final class PlayerEngine {
     private let output: AVPlayerItemVideoOutput
     let renderStore: PatchStore, liveStore: PatchStore
     private let cacheDirectory: URL?
+    var cacheDirectoryURL: URL? { cacheDirectory }
     private let lock = NSLock()
     private var _mode = PlayMode.livePreview, _combo = false, _paused = false
     private var renderToken = CancelToken(), liveToken = CancelToken()

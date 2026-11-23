@@ -167,5 +167,39 @@ check(vf.renderedRanges() == [0...330_000], "PatchStore VFR: gap shorter than ho
 vf.put(pts: 900_000, [dummy])
 check(vf.renderedRanges().count == 2 && vf.get(displayedAt: 600_000) == nil, "PatchStore VFR: real hole stays a hole")
 
+// CacheManager
+let croot = FileManager.default.temporaryDirectory.appendingPathComponent("cm-\(UUID().uuidString)")
+for (i, name) in ["a", "b", "c"].enumerated() {
+    let d = croot.appendingPathComponent(name); try! FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+    try! Data(count: 1000).write(to: d.appendingPathComponent("f.bin"))
+    try! FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: Double(i - 10) * 3600)], ofItemAtPath: d.appendingPathComponent("f.bin").path)
+    try! FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: Double(i - 10) * 3600)], ofItemAtPath: d.path)
+}
+check(CacheManager.totalBytes(root: croot) >= 3000, "CacheManager total size counts files")
+let freed = CacheManager.enforce(root: croot, capBytes: 2000, keep: croot.appendingPathComponent("a"))
+let left = Set(CacheManager.entries(root: croot).map { $0.url.lastPathComponent })
+check(freed >= 1000 && !left.contains("b") && left.contains("a") && left.contains("c"), "CacheManager evicts least recently used, never the kept one")
+CacheManager.clear(root: croot, keep: croot.appendingPathComponent("c"))
+check(Set(CacheManager.entries(root: croot).map { $0.url.lastPathComponent }) == ["c"], "CacheManager.clear keeps only the active cache")
+try? FileManager.default.removeItem(at: croot)
+
+// FaceLibrary
+let ldir = FileManager.default.temporaryDirectory.appendingPathComponent("fl-\(UUID().uuidString)")
+let lib = FaceLibrary(directory: ldir)
+var e1 = [Float](repeating: 0, count: 512); e1[0] = 3
+var e2 = [Float](repeating: 0, count: 512); e2[1] = 5
+let ent = lib.add(name: "Test", embedding: e1, thumbnailJPEG: Data([1, 2, 3]))
+check(lib.entries.count == 1 && lib.embeddings(id: ent.id).count == 1 && abs(lib.embeddings(id: ent.id)[0][0] - 1) < 1e-6, "FaceLibrary add stores a normalised embedding")
+lib.addPhoto(id: ent.id, embedding: e2)
+let avg = FaceLibrary.averaged(lib.embeddings(id: ent.id))!
+check(lib.entries[0].photoCount == 2 && abs(avg[0] - 0.70710678) < 1e-5 && abs(avg[1] - 0.70710678) < 1e-5, "FaceLibrary averaging = renormalised mean of normalised embeddings")
+lib.rename(id: ent.id, to: "Renamed")
+let lib2 = FaceLibrary(directory: ldir)
+check(lib2.entries.first?.name == "Renamed" && lib2.entries.first?.photoCount == 2 && lib2.thumbnail(id: ent.id) == Data([1, 2, 3]), "FaceLibrary persists across reload")
+check(FaceLibrary.fingerprint(avg) == FaceLibrary.fingerprint(avg) && FaceLibrary.fingerprint(avg) != FaceLibrary.fingerprint(e1), "FaceLibrary fingerprint is stable and discriminating")
+lib2.delete(id: ent.id)
+check(lib2.entries.isEmpty && lib2.embeddings(id: ent.id).isEmpty && FaceLibrary(directory: ldir).entries.isEmpty, "FaceLibrary delete removes everything")
+try? FileManager.default.removeItem(at: ldir)
+
 print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)
