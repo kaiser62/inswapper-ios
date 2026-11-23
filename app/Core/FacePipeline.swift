@@ -20,7 +20,10 @@ enum PipelineError: Error { case noFace, badModel(String) }
 
 /// Loads the three Core ML models (.mlmodelc) and emap. Sync, frame-in / patch-out.
 final class FacePipeline {
-    let scrfd: MLModel, arcface: MLModel, swapper: MLModel
+    let scrfd: MLModel, scrfdCPU: MLModel, arcface: MLModel, swapper: MLModel
+    /// Detect on the CPU (24 ms, leaves the ANE to the swapper) when another worker is swapping at the same time; ANE (4 ms) otherwise.
+    private let cpuLock = NSLock(); private var _cpuDetector = false
+    var cpuDetector: Bool { get { cpuLock.lock(); defer { cpuLock.unlock() }; return _cpuDetector } set { cpuLock.lock(); _cpuDetector = newValue; cpuLock.unlock() } }
     let emap: [Float]  // 512x512 row-major
     private let latentShape: [NSNumber]
     /// Accumulated per-stage wall time in ms (reset with `resetTimings`). Shown in the app to measure the Swift CPU cost.
@@ -37,7 +40,10 @@ final class FacePipeline {
     init(modelsDirectory dir: URL, computeUnits: MLComputeUnits = .cpuAndNeuralEngine) throws {
         let cfg = MLModelConfiguration(); cfg.computeUnits = computeUnits
         func load(_ n: String) throws -> MLModel { try MLModel(contentsOf: dir.appendingPathComponent(n + ".mlmodelc"), configuration: cfg) }
-        scrfd = try load("scrfd"); arcface = try load("arcface"); swapper = try load("swapper")
+        scrfd = try load("scrfd")
+        let cc = MLModelConfiguration(); cc.computeUnits = .cpuOnly
+        scrfdCPU = try MLModel(contentsOf: dir.appendingPathComponent("scrfd.mlmodelc"), configuration: cc)
+        arcface = try load("arcface"); swapper = try load("swapper")
         let data = try Data(contentsOf: dir.appendingPathComponent("emap.bin"))
         guard data.count == 512 * 512 * 4 else { throw PipelineError.badModel("emap.bin size") }
         emap = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
@@ -47,7 +53,7 @@ final class FacePipeline {
     // MARK: detection (SCRFD buffalo_l det_10g, fixed 640x640)
     func detect(_ frame: CVPixelBuffer, threshold: Float = 0.5) throws -> [DetectedFace] {
         let (canvas, scale) = try timed("letterbox") { try PixelBuf.letterbox(frame) }
-        let out = try timed("scrfd") { try scrfd.prediction(from: MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: canvas)])) }
+        let out = try timed("scrfd") { try (cpuDetector ? scrfdCPU : scrfd).prediction(from: MLDictionaryFeatureProvider(dictionary: ["image": MLFeatureValue(pixelBuffer: canvas)])) }
         let tDecode = Date(); defer { addTiming("decode+nms", Date().timeIntervalSince(tDecode) * 1000) }
         func arr(_ n: String) throws -> [Float] {
             guard let a = out.featureValue(for: n)?.multiArrayValue else { throw PipelineError.badModel("missing output " + n) }

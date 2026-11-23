@@ -27,6 +27,13 @@ final class PlayerEngine {
     private var windowStart = Date(), windowCount = 0, rate = 0.0
     private(set) var lastError: String?
     private var retries = 0, lastTick = Date.distantPast
+    /// Display diagnostics (read by the UI): ticks asked for a frame, frames that were new, ticks with no frame at all.
+    private(set) var dispTicks = 0, dispNew = 0, dispNone = 0
+    var itemInfo: String {
+        guard let it = player.currentItem else { return "no item" }
+        let st = ["unknown", "ready", "FAILED"][min(2, it.status.rawValue)]
+        return "item \(st)\(it.error.map { " (\($0.localizedDescription))" } ?? "") · size \(Int(it.presentationSize.width))x\(Int(it.presentationSize.height)) · hdr \(reader.isHDR)"
+    }
 
     init(pipeline: FacePipeline, reader: VideoReader, latent: [Float], cacheDirectory: URL?, identity: String) {
         self.pipeline = pipeline; self.reader = reader; self.latent = latent; self.cacheDirectory = cacheDirectory
@@ -85,6 +92,7 @@ final class PlayerEngine {
 
     private func applyMode() {
         let m = mode, c = combo
+        pipeline.cpuDetector = c   // two workers swapping at once: detect on CPU so the ANE stays with the swapper
         if m == .renderAhead { restartRender(from: currentTime) } else { renderToken.cancel() }
         if m == .livePreview || c { startLive() } else { liveToken.cancel(); liveStore.removeAll() }
     }
@@ -151,11 +159,14 @@ final class PlayerEngine {
     /// The frame to draw now (the newest decoded frame; the previous one if none is new) and its display time in seconds.
     func nextFrame(hostTime: CFTimeInterval) -> (frame: CVPixelBuffer, time: Double)? {
         let it = output.itemTime(forHostTime: hostTime)
+        lock.lock(); dispTicks += 1; lock.unlock()
         if it.isValid, output.hasNewPixelBuffer(forItemTime: it), let pb = output.copyPixelBuffer(forItemTime: it, itemTimeForDisplay: nil) {
+            lock.lock(); dispNew += 1; lock.unlock()
             lastFrame = (pb, it.seconds)
         } else if lastFrame == nil, let pb = output.copyPixelBuffer(forItemTime: player.currentTime(), itemTimeForDisplay: nil) {
             lastFrame = (pb, player.currentTime().seconds)
         } else if lastFrame != nil { lastFrame!.1 = it.isValid ? it.seconds : lastFrame!.1 }
+        if lastFrame == nil { lock.lock(); dispNone += 1; lock.unlock() }
         return lastFrame.map { ($0.0, $0.1) }
     }
 

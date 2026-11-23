@@ -110,6 +110,7 @@ final class PlayerVM: ObservableObject {
         let ps = presenter
         diagnostics = "build \(Self.build) · mode \(mode.rawValue)\(combo ? "+B" : "") · video \(e.reader.width)x\(e.reader.height) \(String(format: "%.1f", e.duration)) s · t=\(String(format: "%.2f", e.currentTime))\n"
             + statsText + "\npresented \(ps?.presented ?? 0), skipped \(ps?.skipped ?? 0) · ranges \(ranges.count) · retries \(s.retries)"
+            + "\ndisplay: ticks \(e.dispTicks) new \(e.dispNew) noFrame \(e.dispNone) · drawable-nil \(DisplayStats.noDrawable) · gpu-fail \(DisplayStats.presentFail)\n\(e.itemInfo)"
             + "\nlast error: \(s.lastError ?? "none")\nstatus: \(status)"
     }
 
@@ -227,6 +228,8 @@ struct PlayerView: View {
     }
 }
 
+enum DisplayStats { @MainActor static var noDrawable = 0, presentFail = 0 }
+
 struct MetalVideoView: UIViewRepresentable {
     let engine: PlayerEngine
     let presenter: MetalPresenter
@@ -261,9 +264,9 @@ struct MetalVideoView: UIViewRepresentable {
         }
         func stop() { link?.invalidate(); link = nil }
         @objc func tick() {
-            guard let view, let (frame, t) = engine.nextFrame(hostTime: CACurrentMediaTime()),
-                  let drawable = (view.layer as? CAMetalLayer)?.nextDrawable() else { return }
-            presenter.present(frame: frame, patches: engine.patches(at: t), to: drawable.texture, drawable: drawable)
+            guard let view, let (frame, t) = engine.nextFrame(hostTime: CACurrentMediaTime()) else { return }
+            guard let drawable = (view.layer as? CAMetalLayer)?.nextDrawable() else { DisplayStats.noDrawable += 1; return }
+            if !presenter.present(frame: frame, patches: engine.patches(at: t), to: drawable.texture, drawable: drawable) { DisplayStats.presentFail += 1 }
         }
     }
 }

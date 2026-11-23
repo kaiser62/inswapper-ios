@@ -13,6 +13,7 @@ final class VideoReader {
     let frameDuration: CMTime
     let duration: Double
     let composition: AVMutableVideoComposition
+    private(set) var isHDR = false
 
     init(url: URL, maxLongSide: Int = 1280) async throws {
         asset = AVURLAsset(url: url)
@@ -37,10 +38,19 @@ final class VideoReader {
         composition.renderSize = CGSize(width: width, height: height)
         composition.frameDuration = frameDuration
         composition.instructions = [inst]
-        // Always deliver SDR Rec.709 frames (HDR / HLG / Dolby Vision phone clips are converted by AVFoundation).
-        composition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
-        composition.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
-        composition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
+        // HDR (HLG / PQ) phone clips: ask for SDR Rec.709 so AVFoundation tone-maps. SDR clips keep an untouched composition
+        // (setting the colour properties on those is unnecessary and was the prime suspect for a black player on device).
+        let fds = (try? await t.load(.formatDescriptions)) ?? []
+        let hdr = fds.contains { fd in
+            let tf = CMFormatDescriptionGetExtension(fd, extensionKey: kCMFormatDescriptionExtension_TransferFunction) as? String
+            return tf == (kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG as String) || tf == (kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ as String)
+        }
+        isHDR = hdr
+        if hdr {
+            composition.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
+            composition.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
+            composition.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
+        }
     }
 
     var frameDurationUs: Int64 { Int64((frameDuration.seconds * 1_000_000).rounded()) }
