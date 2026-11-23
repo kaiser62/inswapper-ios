@@ -270,7 +270,7 @@ struct MetalVideoView: UIViewRepresentable {
         @objc func tick() {
             guard let view, let (frame, t) = engine.nextFrame(hostTime: CACurrentMediaTime()) else { return }
             let layer = view.layer as? CAMetalLayer
-            let want = CGSize(width: frame.width, height: frame.height)
+            let want = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
             if let layer, layer.drawableSize != want { layer.drawableSize = want }   // layout can reset it to 0 (no drawable then)
             guard let drawable = layer?.nextDrawable() else {
                 DisplayStats.noDrawable += 1

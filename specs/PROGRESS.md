@@ -93,3 +93,6 @@ Sustained 60 s (scrfd + swapper every frame, ANE): 6.6 fps flat, thermal nominal
 ## Logs tab + rolling release (2026-11-23)
 - New Logs tab (AppLog ring buffer, persisted to Application Support/applog.txt, previous-session tail kept; Copy all / Share / Clear). Player events, 2 s diagnostics snapshots, bench/import lines go to it.
 - CI now publishes InSwapBench.ipa to rolling release tag `latest`: https://github.com/kaiser62/inswapper-ios/releases/download/latest/InSwapBench.ipa (app only, no models/faces).
+
+## Black video root cause on device (2026-11-23, build 27 log)
+- Frames decode fine (centre-pixel sample varies, item ready, hdr false); every tick got nextDrawable() == nil (drawable-nil == ticks, presented 0, no GPU errors). So the HDR/composition theory was wrong. Likely layer.drawableSize reset to 0 by layout. Fix: set layer.drawableSize to the frame size every tick, log layer state on failure.
