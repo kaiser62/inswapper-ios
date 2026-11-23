@@ -68,16 +68,21 @@ enum Bench {
         do {
             let swapper = try load("swapper", .cpuAndNeuralEngine)
             let swIn = try input(for: "swapper"), scIn = try input(for: "scrfd")
-            func loop(_ seconds: Double, _ body: () throws -> Void) rethrows -> Int {
-                let end = nowMs() + seconds * 1000; var n = 0
-                while nowMs() < end { try body(); n += 1 }
+            // Synchronous Core ML calls must run off the async context (the SDK picks the async overload there).
+            func onThread<T>(_ f: @escaping () throws -> T) async throws -> T {
+                try await withCheckedThrowingContinuation { c in
+                    Thread.detachNewThread { c.resume(with: Result { try f() }) }
+                }
+            }
+            let alone: Int = try await onThread {
+                let end = nowMs() + 6000; var n = 0
+                while nowMs() < end { _ = try swapper.prediction(from: swIn); n += 1 }
                 return n
             }
-            let alone = try loop(6) { _ = try swapper.prediction(from: swIn) }
             log(String(format: "swapper alone: %.2f swaps/s", Double(alone) / 6))
             for (label, units) in [("SCRFD on Neural Engine", MLComputeUnits.cpuAndNeuralEngine), ("SCRFD on CPU", .cpuOnly)] {
                 let scrfd = try load("scrfd", units)
-                _ = try scrfd.prediction(from: scIn)   // warm
+                try await onThread { _ = try scrfd.prediction(from: scIn) }   // warm
                 var detMs: [Double] = [], swaps = 0
                 let lock = NSLock(); let done = DispatchGroup(); let t0 = nowMs(), end = t0 + 10_000
                 done.enter()
