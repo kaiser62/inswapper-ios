@@ -59,7 +59,7 @@ final class PlayerVM: ObservableObject {
             else { status = VideoStore.shared.message }
         }
     }
-    func setLibraryVideo(_ e: VideoLibrary.Entry) { AppLog.log("video opened (\(e.width)x\(e.height), \(Int(e.duration)) s, from \(e.source))", "player"); videoURL = VideoStore.shared.url(e); prepare() }
+    func setLibraryVideo(_ e: VideoLibrary.Entry) { AppLog.log("video opened (\(e.width)x\(e.height), \(Int(e.duration)) s, from \(e.source))", "player"); videoURL = VideoStore.shared.url(e); AppData.openVideoFile = e.file; prepare() }
     /// A source photo: detect, embed, derive the latent (also kept so it can be saved to the library).
     func setSource(_ data: Data) {
         AppLog.log("source photo picked \(data.count) bytes", "player")
@@ -93,7 +93,8 @@ final class PlayerVM: ObservableObject {
     }
 
     private func prepare() {
-        guard let url = videoURL, let latent = sourceLatent else { return }
+        guard let url = videoURL else { return }
+        guard let latent = sourceLatent else { status = "Video ready. Now pick a source face (photo or Library)."; return }
         if busy { needsPrepare = true; return }   // a pick made while loading is applied when this finishes
         busy = true
         engine?.shutdown(); engine = nil; timer?.invalidate()
@@ -170,7 +171,7 @@ final class PlayerVM: ObservableObject {
         if !on { engine?.pause(); playing = false }
         UIApplication.shared.isIdleTimerDisabled = on && engine != nil
     }
-    func teardown() { timer?.invalidate(); engine?.shutdown(); engine = nil; UIApplication.shared.isIdleTimerDisabled = false }
+    func teardown() { AppData.openVideoFile = nil; timer?.invalidate(); engine?.shutdown(); engine = nil; UIApplication.shared.isIdleTimerDisabled = false }
 
     static func thermalName(_ s: ProcessInfo.ThermalState) -> String {
         switch s { case .nominal: return "nominal"; case .fair: return "fair"; case .serious: return "SERIOUS"; case .critical: return "CRITICAL"; @unknown default: return "?" }

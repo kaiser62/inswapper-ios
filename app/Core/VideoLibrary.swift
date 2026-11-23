@@ -7,6 +7,7 @@ import ImageIO
 final class VideoLibrary {
     struct Entry: Codable, Equatable, Identifiable {
         var id: String, title: String, file: String, bytes: Int64, duration: Double, width: Int, height: Int, created: Date, source: String
+        var fp: String? = nil   // size + head hash, to avoid storing the same file twice
     }
     enum LibError: Error, LocalizedError {
         case notPlayable, noVideoTrack
@@ -27,6 +28,15 @@ final class VideoLibrary {
 
     func url(of e: Entry) -> URL { directory.appendingPathComponent(e.file) }
     func thumbnailURL(of e: Entry) -> URL { directory.appendingPathComponent(e.id + ".jpg") }
+    /// Cheap content fingerprint: file size + FNV hash of the first 256 KB.
+    static func fingerprint(_ url: URL) -> String {
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        var h: UInt64 = 1469598103934665603
+        if let f = try? FileHandle(forReadingFrom: url) { for b in ((try? f.read(upToCount: 1 << 18)) ?? Data()) { h = (h ^ UInt64(b)) &* 1099511628211 }; try? f.close() }
+        return "\(size)-\(String(h, radix: 16))"
+    }
+    func find(fp: String) -> Entry? { lock.lock(); defer { lock.unlock() }; return entries.first { $0.fp == fp } }
+
     var totalBytes: Int64 { entries.reduce(0) { $0 + $1.bytes } }
 
     /// Checks the file is a playable video; returns (duration s, width, height) of the upright video.
@@ -42,6 +52,8 @@ final class VideoLibrary {
     /// Moves `file` into the library (validates first; on failure the file is left where it was). `source` = host or "Photos"/"Files".
     @discardableResult
     func add(moving file: URL, title: String, source: String) async throws -> Entry {
+        let fp = Self.fingerprint(file)
+        if let dup = find(fp: fp) { try? FileManager.default.removeItem(at: file); return dup }   // same file already stored
         let (dur, w, h) = try await Self.validate(file)
         let id = UUID().uuidString
         let ext = file.pathExtension.isEmpty ? "mp4" : file.pathExtension.lowercased()
@@ -49,7 +61,7 @@ final class VideoLibrary {
         let dst = directory.appendingPathComponent(name)
         do { try FileManager.default.moveItem(at: file, to: dst) } catch { try FileManager.default.copyItem(at: file, to: dst) }
         let bytes = Int64((try? dst.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        let e = Entry(id: id, title: title, file: name, bytes: bytes, duration: dur, width: w, height: h, created: Date(), source: source)
+        let e = Entry(id: id, title: title, file: name, bytes: bytes, duration: dur, width: w, height: h, created: Date(), source: source, fp: fp)
         await makeThumbnail(for: dst, to: directory.appendingPathComponent(id + ".jpg"), duration: dur)
         append(e)
         return e
@@ -177,5 +189,16 @@ final class VideoDownloader: NSObject, URLSessionDownloadDelegate {
         let was = lock.withLock { cancelled }
         if !was, let rd = ns.userInfo[NSURLSessionDownloadTaskResumeData] as? Data { lock.withLock { resumeData = rd } }
         finish(.failure(was ? DLError.cancelled : error))
+    }
+}
+
+extension URL {
+    /// Keeps app data (faces, videos, caches) out of iCloud / device backups.
+    func excludedFromBackup() -> URL {
+        var u = self
+        try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
+        var v = URLResourceValues(); v.isExcludedFromBackup = true
+        try? u.setResourceValues(v)
+        return self
     }
 }

@@ -12,8 +12,11 @@ enum AppData {
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
     }()
-    static let patchCacheRoot = support.appendingPathComponent("patchcache")
-    static let facesDir = support.appendingPathComponent("faces")
+    static let patchCacheRoot = support.appendingPathComponent("patchcache").excludedFromBackup()
+    static let facesDir = support.appendingPathComponent("faces").excludedFromBackup()
+    static let videosDir = support.appendingPathComponent("videos").excludedFromBackup()
+    /// File of the video currently open in the player (it cannot be deleted from the library meanwhile).
+    nonisolated(unsafe) static var openVideoFile: String?
     static var cacheCapBytes: Int64 {
         let gb = UserDefaults.standard.object(forKey: "cacheCapGB") as? Double ?? 2
         return Int64(gb * 1_000_000_000)
@@ -195,7 +198,7 @@ struct ShareSheet: UIViewControllerRepresentable {
 @MainActor
 final class VideoStore: ObservableObject {
     static let shared = VideoStore()
-    let lib = VideoLibrary(directory: AppData.support.appendingPathComponent("videos"))
+    let lib = VideoLibrary(directory: AppData.videosDir)
     private let downloader = VideoDownloader()
     @Published private(set) var entries: [VideoLibrary.Entry] = []
     @Published var message = ""
@@ -227,7 +230,9 @@ final class VideoStore: ObservableObject {
                 Task { @MainActor in if t > 0 { self?.progress = Double(w) / Double(t) } }
             }
             message = "Checking the video…"
-            let e = try await lib.add(moving: f, title: u.deletingPathExtension().lastPathComponent, source: u.host ?? "web")
+            let e: VideoLibrary.Entry
+            do { e = try await lib.add(moving: f, title: u.deletingPathExtension().lastPathComponent, source: u.host ?? "web") }
+            catch { try? FileManager.default.removeItem(at: f); throw error }   // do not leave the rejected download behind
             refresh(); message = "Added."
             return e
         } catch {
@@ -271,7 +276,12 @@ struct VideoLibrarySheet: View {
                                 }
                             }
                         }.buttonStyle(.plain)
-                    }.onDelete { idx in idx.map { store.entries[$0] }.forEach { store.delete($0) } }
+                    }.onDelete { idx in
+                        for e in idx.map({ store.entries[$0] }) {
+                            if e.file == AppData.openVideoFile { store.message = "That video is open in the player. Open another one first."; continue }
+                            store.delete(e)
+                        }
+                    }
                 }
             }
             .navigationTitle("Videos")
