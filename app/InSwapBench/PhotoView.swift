@@ -3,7 +3,7 @@ import PhotosUI
 import Photos
 import ImageIO
 
-private struct Box<T>: @unchecked Sendable { let v: T }
+struct Box<T>: @unchecked Sendable { let v: T }
 
 /// One target photo in the batch: its detected faces (largest first), which are selected, and the swapped result.
 struct PhotoJob: Identifiable {
@@ -49,9 +49,7 @@ final class PhotoVM: ObservableObject {
         if let p = pipe { return p }
         status = "Loading models (the first load compiles for the Neural Engine and can take a while)…"
         let t0 = Date()
-        let p = try await Task.detached(priority: .userInitiated) {
-            Box(v: try FacePipeline(modelsDirectory: ModelStore.dir))
-        }.value.v
+        let p = try await SharedPipeline.get()
         pipe = p
         timings += String(format: "model load: %.0f ms\n", Date().timeIntervalSince(t0) * 1000)
         return p

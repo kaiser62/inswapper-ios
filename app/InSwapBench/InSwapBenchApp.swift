@@ -7,6 +7,7 @@ struct InSwapBenchApp: App {
         WindowGroup {
             TabView {
                 PhotoView().tabItem { Label("Photo", systemImage: "face.smiling") }
+                PlayerView().tabItem { Label("Player", systemImage: "play.rectangle") }
                 ContentView().tabItem { Label("Models & Bench", systemImage: "gauge") }
             }
         }

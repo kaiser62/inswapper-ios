@@ -48,6 +48,11 @@ final class PlayerEngine {
     func play() { player.play() }
     func pause() { player.pause(); renderStore.flush() }
 
+    /// While dragging a scrubber: move the playhead only (raw frames; workers keep going, restart happens on `seek`).
+    func scrub(to t: Double) {
+        player.seek(to: CMTime(seconds: min(max(0, t), max(0, duration - 0.05)), preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
     func seek(to t: Double) {
         let c = min(max(0, t), max(0, duration - 0.05))
         player.seek(to: CMTime(seconds: c, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
