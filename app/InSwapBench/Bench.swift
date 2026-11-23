@@ -60,6 +60,52 @@ enum Bench {
         return try MLModel(contentsOf: ModelStore.compiledURL(name), configuration: cfg)
     }
 
+
+    /// Phase 2 contention test: swapper back-to-back on one thread while SCRFD runs at ~24 Hz on another (what the player
+    /// does when a worker swaps while detection also has to keep up). Decides where SCRFD should run.
+    static func contention(log: @escaping (String) -> Void) async {
+        log("\n== contention: swapper back-to-back + SCRFD at 24 Hz (10 s each)")
+        do {
+            let swapper = try load("swapper", .cpuAndNeuralEngine)
+            let swIn = try input(for: "swapper"), scIn = try input(for: "scrfd")
+            func loop(_ seconds: Double, _ body: () throws -> Void) rethrows -> Int {
+                let end = nowMs() + seconds * 1000; var n = 0
+                while nowMs() < end { try body(); n += 1 }
+                return n
+            }
+            let alone = try loop(6) { _ = try swapper.prediction(from: swIn) }
+            log(String(format: "swapper alone: %.2f swaps/s", Double(alone) / 6))
+            for (label, units) in [("SCRFD on Neural Engine", MLComputeUnits.cpuAndNeuralEngine), ("SCRFD on CPU", .cpuOnly)] {
+                let scrfd = try load("scrfd", units)
+                _ = try scrfd.prediction(from: scIn)   // warm
+                var detMs: [Double] = [], swaps = 0
+                let lock = NSLock(); let done = DispatchGroup(); let t0 = nowMs(), end = t0 + 10_000
+                done.enter()
+                Thread.detachNewThread {
+                    var n = 0
+                    while nowMs() < end { _ = try? swapper.prediction(from: swIn); n += 1 }
+                    lock.lock(); swaps = n; lock.unlock(); done.leave()
+                }
+                done.enter()
+                Thread.detachNewThread {
+                    var next = nowMs()
+                    while nowMs() < end {
+                        let a = nowMs(); _ = try? scrfd.prediction(from: scIn); let d = nowMs() - a
+                        lock.lock(); detMs.append(d); lock.unlock()
+                        next += 1000.0 / 24
+                        let wait = next - nowMs()
+                        if wait > 0 { Thread.sleep(forTimeInterval: wait / 1000) } else { next = nowMs() }
+                    }
+                    done.leave()
+                }
+                await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in done.notify(queue: .global()) { c.resume() } }
+                let st = stats(detMs)
+                log(String(format: "%@: swaps %.2f/s (alone %.2f), SCRFD %.1f Hz achieved, detect mean %.1f ms p95 %.1f ms, thermal %@",
+                           label, Double(swaps) / 10, Double(alone) / 6, Double(detMs.count) / 10, st.mean, st.p95, thermal()))
+            }
+        } catch { log("contention FAILED: \(error.localizedDescription)") }
+    }
+
     static func run(log: @escaping (String) -> Void) async {
         let info: String = await MainActor.run {
             UIApplication.shared.isIdleTimerDisabled = true   // keep screen on: a lock suspends the app mid-run
@@ -70,6 +116,7 @@ enum Bench {
 
         // Sustained test FIRST, on a cool phone: it is the closest proxy for real playback.
         await sustained(log: log)
+        await contention(log: log)
 
         let configs: [(String, MLComputeUnits)] = [
             ("cpuAndNeuralEngine", .cpuAndNeuralEngine),
