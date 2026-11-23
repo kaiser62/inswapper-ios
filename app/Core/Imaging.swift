@@ -9,7 +9,7 @@ enum ImagingError: Error { case decode, alloc }
 enum PixelBuf {
     static func make(width: Int, height: Int) throws -> CVPixelBuffer {
         var pb: CVPixelBuffer?
-        let attrs: [CFString: Any] = [kCVPixelBufferIOSurfacePropertiesKey: [:] as [String: Any]]
+        let attrs: [CFString: Any] = [kCVPixelBufferIOSurfacePropertiesKey: [:] as [String: Any], kCVPixelBufferMetalCompatibilityKey: true]
         guard CVPixelBufferCreate(nil, width, height, kCVPixelFormatType_32BGRA, attrs as CFDictionary, &pb) == kCVReturnSuccess,
               let out = pb else { throw ImagingError.alloc }
         return out

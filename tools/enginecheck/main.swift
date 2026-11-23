@@ -35,6 +35,13 @@ func main() async throws {
         want.remove(k)
         let p = store.get(pts: pts) ?? []
         let out = try Compositor.composite(f, patches: p)
+        if let mc = MetalCompositor() {
+            let t = Date(); let g = try mc.composite(f, patches: p); let ms = Date().timeIntervalSince(t) * 1000
+            var mx = 0
+            PixelBuf.withBytes(out) { a, w, h, ba in PixelBuf.withBytes(g) { b, _, _, bb in
+                for y in 0..<h { for x in 0..<w { for c in 0..<3 { mx = max(mx, abs(Int(a[y * ba + x * 4 + c]) - Int(b[y * bb + x * 4 + c]))) } } } } }
+            print(String(format: "  metal %.1f ms, max abs diff vs CPU %d", ms, mx))
+        }
         try PixelBuf.writeJPEG(out, to: test.appendingPathComponent("eng_\(clip.deletingPathExtension().lastPathComponent)_\(idx).jpg"))
         print("wrote frame", idx, "pts", pts, "patches", p.count); idx += 1
         return !want.isEmpty

@@ -96,6 +96,7 @@ let dummy = SwapPatch(bgr: [UInt8](repeating: 0, count: 128 * 128 * 3), M: Affin
 for k in [0, 40_000, 80_000, 400_000, 440_000] { ps.put(pts: Int64(k), k == 80_000 ? [] : [dummy]) }
 ps.put(pts: 40_000, [dummy])  // overwrite must not duplicate keys
 check(ps.count == 5, "PatchStore: 5 distinct frames")
+check(ps.get(displayedAt: 79_999) != nil && ps.get(displayedAt: 120_000)?.isEmpty == true && ps.get(displayedAt: 200_000) == nil && ps.get(displayedAt: 39_999) != nil && ps.get(displayedAt: -5) == nil, "PatchStore: displayed-at is a floor lookup")
 check(ps.has(pts: 41_000) && !ps.has(pts: 200_000), "PatchStore: has within half a frame only")
 check(ps.get(pts: 80_000)?.isEmpty == true && ps.get(pts: 200_000) == nil, "PatchStore: empty = processed, missing = nil")
 check(ps.latest(atOrBefore: 80_000) != nil && ps.latest(atOrBefore: -1) == nil, "PatchStore: latest skips empty entries")

@@ -29,6 +29,16 @@ final class PatchStore {
         return abs(k - pts) <= frameDurationUs / 2 + 1 ? patches[k] : nil
     }
 
+    /// Patches for the frame DISPLAYED at playhead time `t`: the frame with the greatest key <= t (a player shows frame k
+    /// from its PTS until the next one), if it is within one frame duration; nil = not rendered. Use this from the player.
+    func get(displayedAt t: Int64) -> [SwapPatch]? {
+        lock.lock(); defer { lock.unlock() }
+        var lo = 0, hi = keys.count
+        while lo < hi { let mid = (lo + hi) / 2; if keys[mid] <= t { lo = mid + 1 } else { hi = mid } }
+        guard lo > 0, t - keys[lo - 1] < frameDurationUs * 3 / 2 else { return nil }
+        return patches[keys[lo - 1]]
+    }
+
     /// Newest patches at or before `pts` (Mode B: latest available).
     func latest(atOrBefore pts: Int64) -> [SwapPatch]? {
         lock.lock(); defer { lock.unlock() }

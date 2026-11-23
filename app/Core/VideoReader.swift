@@ -12,7 +12,7 @@ final class VideoReader {
     let width: Int, height: Int       // output (upright, scaled) size
     let frameDuration: CMTime
     let duration: Double
-    private let composition: AVMutableVideoComposition
+    let composition: AVMutableVideoComposition
 
     init(url: URL, maxLongSide: Int = 1280) async throws {
         asset = AVURLAsset(url: url)
@@ -47,7 +47,9 @@ final class VideoReader {
     func read(from start: Double, handler: (CVPixelBuffer, Int64) throws -> Bool) throws {
         let reader = try AVAssetReader(asset: asset)
         let out = AVAssetReaderVideoCompositionOutput(videoTracks: [track], videoSettings: [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any]])
         out.videoComposition = composition
         out.alwaysCopiesSampleData = false
         guard reader.canAdd(out) else { throw VideoError.readerFailed("cannot add output") }
