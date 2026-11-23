@@ -60,6 +60,10 @@ final class PlayerVM: ObservableObject {
     @Published var statsText = ""
     @Published var scrubbing = false
     let presenter = MetalPresenter()
+    let export = ExportSession()
+    @Published var showExportSheet = false
+    @Published var showExportProgress = false
+    private var currentIdentity: String?
 
     private var videoURL: URL?, sourceLatent: [Float]?, sourceEmbedding: [Float]?, sourceThumb: Data?
     private var timer: Timer?
@@ -129,6 +133,7 @@ final class PlayerVM: ObservableObject {
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 CacheManager.touch(dir)
                 CacheManager.enforce(root: AppData.patchCacheRoot, capBytes: AppData.cacheCapBytes, keep: dir)
+                currentIdentity = identity
                 let e = PlayerEngine(pipeline: pipe, reader: reader, latent: latent, strength: strength, cacheDirectory: dir, identity: identity)
                 e.mode = mode; e.combo = combo
                 duration = reader.duration; engine = e
@@ -179,7 +184,27 @@ final class PlayerVM: ObservableObject {
     func togglePlay() { guard let e = engine else { return }; AppLog.log(e.isPlaying ? "pause" : "play", "player"); if e.isPlaying { e.pause() } else { e.play() }; playing = e.isPlaying }
     func scrub(_ t: Double) { time = t; engine?.scrub(to: t) }
     func endScrub() { AppLog.log("seek to \(String(format: "%.2f", time))", "player"); scrubbing = false; engine?.seek(to: time) }
-    func setActive(_ a: Bool) { active = a; applyWork() }
+    // MARK: export
+    var swapperName: String { fastSwapper && ModelStore.hasPal8 ? "8-bit" : "FP16" }
+    private var swapsPerSecond: Double { (fastSwapper && ModelStore.hasPal8 ? 15.0 : 6.5) / Double((strength + 99) / 100) }
+    var exportPlan: ExportEngine.Plan? {
+        guard let e = engine else { return nil }
+        return ExportEngine(pipeline: e.pipeline, reader: e.reader, store: e.renderStore, latent: e.latent, strength: strength).plan()
+    }
+    var exportSwapsPerSecond: Double { swapsPerSecond }
+    var exportFreeBytes: Int64 { VideoDownloader.freeBytes(at: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]) }
+    /// Shuts the Player engine down (two writers must never share the patch store) and hands everything to the export.
+    func startExport() {
+        guard let e = engine, let dir = e.cacheDirectoryURL, let id = currentIdentity else { return }
+        let req = ExportRequest(pipeline: e.pipeline, reader: e.reader, latent: e.latent, strength: e.strength, cacheDirectory: dir, identity: id,
+                                swapsPerSecond: swapsPerSecond, title: "export")
+        timer?.invalidate(); e.shutdown(); engine = nil; playing = false
+        showExportProgress = true
+        export.start(req)
+    }
+    func endExport() { showExportProgress = false; export.reset(); prepare() }
+
+    func setActive(_ a: Bool) { active = a; export.setActive(a); applyWork() }
     func setVisible(_ v: Bool) { visible = v; applyWork() }
     private func applyWork() {
         let on = active && visible
@@ -266,6 +291,13 @@ struct PlayerView: View {
             }
             .navigationTitle("Player")
         }
+        .sheet(isPresented: $vm.showExportSheet) {
+            if let plan = vm.exportPlan {
+                ExportSheet(plan: plan, duration: vm.duration, swapsPerSecond: vm.exportSwapsPerSecond, strength: vm.strength,
+                            swapperName: vm.swapperName, freeBytes: vm.exportFreeBytes) { vm.startExport() }
+            }
+        }
+        .fullScreenCover(isPresented: $vm.showExportProgress) { ExportProgressView(session: vm.export) { vm.endExport() } }
         .sheet(isPresented: $showVideos) { VideoLibrarySheet { vm.setLibraryVideo($0) } }
         .sheet(isPresented: $showFaces) { FacePickerSheet { vm.setLibraryFace($0) } }
         .onChange(of: videoItem) { _, item in
@@ -308,6 +340,8 @@ struct PlayerView: View {
                 Text(String(format: "%d:%02d / %d:%02d", Int(vm.time) / 60, Int(vm.time) % 60, Int(vm.duration) / 60, Int(vm.duration) % 60))
                     .font(.system(.footnote, design: .monospaced))
                 Spacer()
+                Button("Export", systemImage: "square.and.arrow.up") { vm.showExportSheet = true }
+                    .buttonStyle(.bordered).font(.footnote)
             }
         }
     }
