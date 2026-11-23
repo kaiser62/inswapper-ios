@@ -89,3 +89,7 @@ Sustained 60 s (scrfd + swapper every frame, ANE): 6.6 fps flat, thermal nominal
 - Contention bench (iPhone 14 Pro): SCRFD on ANE next to back-to-back swaps collapses to 6.7 Hz (150 ms); on CPU holds 24 Hz (24 ms), swaps stay 7.0/s. Decision: detector on CPU whenever two workers run (combo); ANE for single-worker modes. Implemented as FacePipeline.cpuDetector set by PlayerEngine.applyMode.
 - First device build: Player tab black, audio only. Prime suspect: Rec.709 colour properties on the video composition, applied to every clip. Now only set for HLG/PQ tracks. Added display diagnostics (ticks/new/noFrame/drawable-nil/gpu-fail, AVPlayerItem status/error/size/hdr) to Copy diagnostics.
 - Advisor verdict: fix is an unverified guess (user's iPhone clip may be HLG, then composition unchanged); make build conclusive: extended diagnostics (GPU command-buffer errors, drawable vs frame size, centre-pixel sample), cpuDetector only for A+B (renderAhead && combo), verify isHDR gate on Mac harnesses, take IPA only from HEAD CI run. Always ask user for Copy diagnostics.
+
+## Logs tab + rolling release (2026-11-23)
+- New Logs tab (AppLog ring buffer, persisted to Application Support/applog.txt, previous-session tail kept; Copy all / Share / Clear). Player events, 2 s diagnostics snapshots, bench/import lines go to it.
+- CI now publishes InSwapBench.ipa to rolling release tag `latest`: https://github.com/kaiser62/inswapper-ios/releases/download/latest/InSwapBench.ipa (app only, no models/faces).

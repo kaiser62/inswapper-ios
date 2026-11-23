@@ -46,13 +46,13 @@ final class PlayerVM: ObservableObject {
 
     private var videoURL: URL?, sourceData: Data?
     private var timer: Timer?
-    private var needsPrepare = false
+    private var needsPrepare = false, logTick = 0
     private var active = true, visible = true
     @Published var diagnostics = ""
     static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
 
-    func setVideo(_ url: URL) { videoURL = url; prepare() }
-    func setSource(_ data: Data) { sourceData = data; sourceImage = ImageFile.cgImage(data: data, maxSide: 200); prepare() }
+    func setVideo(_ url: URL) { AppLog.log("video picked \(url.lastPathComponent)", "player"); videoURL = url; prepare() }
+    func setSource(_ data: Data) { AppLog.log("source photo picked \(data.count) bytes", "player"); sourceData = data; sourceImage = ImageFile.cgImage(data: data, maxSide: 200); prepare() }
 
     private func prepare() {
         guard let url = videoURL, let data = sourceData else { return }
@@ -81,11 +81,13 @@ final class PlayerVM: ObservableObject {
                 e.mode = mode; e.combo = combo
                 duration = reader.duration; engine = e
                 e.start()
+                AppLog.log("engine ready: \(reader.width)x\(reader.height) \(reader.duration) s hdr \(reader.isHDR) mode \(mode.rawValue) combo \(combo)", "player")
                 status = "Ready. \(Int(reader.duration)) s, \(reader.width)×\(reader.height). Mode \(mode.rawValue)."
                 startTimer()
             } catch PipelineError.noFace {
                 status = "No face found in the source photo."
             } catch {
+                AppLog.log("prepare FAILED: \(error)", "player")
                 status = "Failed: \(error.localizedDescription)"
             }
         }
@@ -108,19 +110,21 @@ final class PlayerVM: ObservableObject {
         statsText = String(format: "%.1f swaps/s · latency %.0f ms · cached %d frames (%.0f MB) · thermal %@",
                            s.swapsPerSecond, s.latencyMs, s.cachedFrames, s.cacheMB, Self.thermalName(s.thermal))
         let ps = presenter
+        defer { logTick += 1; if logTick % 8 == 0 { AppLog.log(diagnostics.replacingOccurrences(of: "\n", with: " | "), "player") } }
         diagnostics = "build \(Self.build) · mode \(mode.rawValue)\(combo ? "+B" : "") · video \(e.reader.width)x\(e.reader.height) \(String(format: "%.1f", e.duration)) s · t=\(String(format: "%.2f", e.currentTime))\n"
             + statsText + "\npresented \(ps?.presented ?? 0), skipped \(ps?.skipped ?? 0) · ranges \(ranges.count) · retries \(s.retries)"
             + "\ndisplay: ticks \(e.dispTicks) new \(e.dispNew) noFrame \(e.dispNone) · drawable-nil \(DisplayStats.noDrawable) · no-texture/busy \(DisplayStats.presentFail) · gpu-errors \(ps?.gpuErrors ?? 0) (\(ps?.lastGPUError ?? "-"))\nframe \(e.frameSize) \(e.frameSample) · drawable \(ps?.lastDstSize ?? "-")\n\(e.itemInfo)"
             + "\nlast error: \(s.lastError ?? "none")\nstatus: \(status)"
     }
 
-    func togglePlay() { guard let e = engine else { return }; if e.isPlaying { e.pause() } else { e.play() }; playing = e.isPlaying }
+    func togglePlay() { guard let e = engine else { return }; AppLog.log(e.isPlaying ? "pause" : "play", "player"); if e.isPlaying { e.pause() } else { e.play() }; playing = e.isPlaying }
     func scrub(_ t: Double) { time = t; engine?.scrub(to: t) }
-    func endScrub() { scrubbing = false; engine?.seek(to: time) }
+    func endScrub() { AppLog.log("seek to \(String(format: "%.2f", time))", "player"); scrubbing = false; engine?.seek(to: time) }
     func setActive(_ a: Bool) { active = a; applyWork() }
     func setVisible(_ v: Bool) { visible = v; applyWork() }
     private func applyWork() {
         let on = active && visible
+        AppLog.log("work \(on ? "on" : "paused") (active \(active), visible \(visible))", "player")
         engine?.workPaused = !on
         if !on { engine?.pause(); playing = false }
         UIApplication.shared.isIdleTimerDisabled = on && engine != nil

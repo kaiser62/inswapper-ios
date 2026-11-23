@@ -3,12 +3,14 @@ import UniformTypeIdentifiers
 
 @main
 struct InSwapBenchApp: App {
+    init() { AppLog.log("launch build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?") · \(ProcessInfo.processInfo.operatingSystemVersionString) · thermal \(ProcessInfo.processInfo.thermalState.rawValue)", "app") }
     var body: some Scene {
         WindowGroup {
             TabView {
                 PhotoView().tabItem { Label("Photo", systemImage: "face.smiling") }
                 PlayerView().tabItem { Label("Player", systemImage: "play.rectangle") }
                 ContentView().tabItem { Label("Models & Bench", systemImage: "gauge") }
+                LogsView().tabItem { Label("Logs", systemImage: "doc.plaintext") }
             }
         }
     }
@@ -20,7 +22,7 @@ final class VM: ObservableObject {
     @Published var busy = false
     @Published var installed = ModelStore.isInstalled
 
-    func append(_ s: String) { output += s + "\n" }
+    func append(_ s: String) { output += s + "\n"; AppLog.log(s, "bench") }
 
     func importPicked(_ url: URL) {
         busy = true
