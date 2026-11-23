@@ -27,6 +27,9 @@ enum CacheManager {
             .map { ($0, size(of: $0), lastUsed($0)) }
     }
 
+    /// Marks a cache directory as just used (LRU order is by modification time).
+    static func touch(_ dir: URL) { try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: dir.path) }
+
     static func totalBytes(root: URL) -> Int64 { size(of: root) }
 
     /// Deletes least-recently-used cache directories until the total is <= capBytes. `keep` (the one in use) is never deleted.
@@ -36,7 +39,7 @@ enum CacheManager {
         var list = entries(root: root).sorted { $0.used < $1.used }
         var total = list.reduce(0) { $0 + $1.bytes }
         var freed: Int64 = 0
-        while total > capBytes, let victim = list.first(where: { $0.url.standardizedFileURL != keep?.standardizedFileURL }) {
+        while total > capBytes, let victim = list.first(where: { $0.url.lastPathComponent != keep?.lastPathComponent }) {
             try? FileManager.default.removeItem(at: victim.url)
             total -= victim.bytes; freed += victim.bytes
             list.removeAll { $0.url == victim.url }

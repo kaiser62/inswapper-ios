@@ -66,6 +66,31 @@ final class FaceLibrary {
         try? FileManager.default.removeItem(at: embURL(id)); try? FileManager.default.removeItem(at: thumbURL(id)); save()
     }
 
+    // MARK: backup (a user-initiated file; contains face-derived numbers, keep it private)
+    private struct Backup: Codable { var version = 1; var items: [Item]
+        struct Item: Codable { var entry: Entry; var embeddings: Data; var thumb: Data? } }
+
+    func exportData() -> Data? {
+        lock.lock(); defer { lock.unlock() }
+        let items = entries.map { e in Backup.Item(entry: e, embeddings: (try? Data(contentsOf: embURL(e.id))) ?? Data(), thumb: try? Data(contentsOf: thumbURL(e.id))) }
+        return try? JSONEncoder.iso.encode(Backup(items: items))
+    }
+
+    /// Adds every identity from a backup (new ids; nothing is overwritten). Returns how many were added.
+    @discardableResult
+    func importData(_ d: Data) -> Int {
+        guard let b = try? JSONDecoder.iso.decode(Backup.self, from: d) else { return 0 }
+        lock.lock(); defer { lock.unlock() }
+        var n = 0
+        for it in b.items where it.embeddings.count >= 512 * 4 && it.embeddings.count % (512 * 4) == 0 {
+            var e = it.entry; e.id = UUID().uuidString
+            try? it.embeddings.write(to: embURL(e.id), options: .atomic)
+            if let t = it.thumb { try? t.write(to: thumbURL(e.id), options: .atomic) }
+            entries.append(e); n += 1
+        }
+        save(); return n
+    }
+
     /// Mean of the L2-normalised embeddings, re-normalised (apply emap AFTER this).
     static func averaged(_ e: [[Float]]) -> [Float]? {
         guard let f = e.first else { return nil }
@@ -76,7 +101,7 @@ final class FaceLibrary {
 
     static func normalised(_ v: [Float]) -> [Float] {
         let n = v.reduce(0) { $0 + $1 * $1 }.squareRoot()
-        return n > 0 ? v.map { $0 / n } : v
+        return n > 0 && abs(n - 1) > 1e-6 ? v.map { $0 / n } : v   // already unit length: unchanged, so normalising twice is bit-identical
     }
 
     /// Stable short fingerprint of a latent, for cache identities (the library stores no photo).

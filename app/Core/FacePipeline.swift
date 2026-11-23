@@ -114,9 +114,12 @@ final class FacePipeline {
         return FaceLibrary.normalised(lat)
     }
 
+    /// The one path from embeddings to a latent (single photo or a library identity): average, then emap.
+    func latent(fromEmbeddings e: [[Float]]) -> [Float]? { FaceLibrary.averaged(e).map { latent(fromEmbedding: $0) } }
+
     /// latent = L2norm( L2norm(arcface(aligned112)) @ emap ), computed once per source face.
     func latent(forSource frame: CVPixelBuffer, face: DetectedFace) throws -> [Float] {
-        latent(fromEmbedding: try embedding(forSource: frame, face: face))
+        latent(fromEmbeddings: [try embedding(forSource: frame, face: face)])!
     }
 
     // MARK: swap

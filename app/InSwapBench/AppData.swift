@@ -1,4 +1,5 @@
 import PhotosUI
+import UniformTypeIdentifiers
 import CoreGraphics
 import Foundation
 import SwiftUI
@@ -32,12 +33,14 @@ final class FaceStore: ObservableObject {
 
     /// Averaged identity -> latent (needs the pipeline's emap).
     func latent(id: String, pipeline: FacePipeline) -> [Float]? {
-        FaceLibrary.averaged(lib.embeddings(id: id)).map { pipeline.latent(fromEmbedding: $0) }
+        pipeline.latent(fromEmbeddings: lib.embeddings(id: id))
     }
     func add(name: String, embedding: [Float], thumb: Data?) -> FaceLibrary.Entry { let e = lib.add(name: name, embedding: embedding, thumbnailJPEG: thumb); refresh(); return e }
     func addPhoto(id: String, embedding: [Float]) { lib.addPhoto(id: id, embedding: embedding); refresh() }
     func rename(_ id: String, _ name: String) { lib.rename(id: id, to: name); refresh() }
     func delete(_ id: String) { lib.delete(id: id); refresh() }
+    func exportData() -> Data? { lib.exportData() }
+    func importData(_ d: Data) -> Int { let n = lib.importData(d); refresh(); return n }
 }
 
 /// Detects the largest face in a photo and returns its embedding + a small JPEG thumbnail.
@@ -53,12 +56,15 @@ enum FaceIngest {
 struct FacesView: View {
     @ObservedObject private var store = FaceStore.shared
     @State private var newItems: [PhotosPickerItem] = []
-    @State private var addTo: FaceLibrary.Entry?
+    @State private var addTarget: FaceLibrary.Entry?
+    @State private var showAddPicker = false
     @State private var addItems: [PhotosPickerItem] = []
     @State private var renaming: FaceLibrary.Entry?
     @State private var newName = ""
     @State private var note = "Add 1-8 photos of one person. Photos are analysed on this device; only a 512-number identity and a small thumbnail are kept."
     @State private var busy = false
+    @State private var importing = false
+    @State private var shareURL: URL?
 
     var body: some View {
         NavigationStack {
@@ -67,6 +73,10 @@ struct FacesView: View {
                     PhotosPicker(selection: $newItems, maxSelectionCount: 8, matching: .images) { Label("New face from photos", systemImage: "person.crop.circle.badge.plus") }
                         .buttonStyle(.borderedProminent).disabled(busy)
                     Text(note).font(.footnote).foregroundStyle(.secondary)
+                    HStack {
+                        Button { exportBackup() } label: { Label("Back up", systemImage: "square.and.arrow.up") }.buttonStyle(.bordered).disabled(store.entries.isEmpty)
+                        Button { importing = true } label: { Label("Restore", systemImage: "square.and.arrow.down") }.buttonStyle(.bordered)
+                    }.font(.footnote)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 12)], spacing: 12) {
                         ForEach(store.entries, id: \.id) { e in
                             VStack {
@@ -77,7 +87,7 @@ struct FacesView: View {
                                 Text("\(e.photoCount) photo\(e.photoCount == 1 ? "" : "s")").font(.caption2).foregroundStyle(.secondary)
                             }
                             .contextMenu {
-                                Button("Add photos") { addTo = e }
+                                Button("Add photos") { addTarget = e; showAddPicker = true }
                                 Button("Rename") { newName = e.name; renaming = e }
                                 Button("Delete", role: .destructive) { store.delete(e.id) }
                             }
@@ -94,16 +104,29 @@ struct FacesView: View {
             Task { await ingest(picked, into: nil) }
         }
         .onChange(of: addItems) { _, items in
-            guard !items.isEmpty, let t = addTo else { return }
-            let picked = items; addItems = []; addTo = nil
-            Task { await ingest(picked, into: t) }
+            guard !items.isEmpty, let t = addTarget else { return }
+            let picked = items; addItems = []
+            Task { await ingest(picked, into: t); addTarget = nil }
         }
-        .photosPicker(isPresented: Binding(get: { addTo != nil }, set: { if !$0 { addTo = nil } }), selection: $addItems, maxSelectionCount: 8, matching: .images)
+        .photosPicker(isPresented: $showAddPicker, selection: $addItems, maxSelectionCount: 8, matching: .images)
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { r in
+            guard case let .success(u) = r else { return }
+            let ok = u.startAccessingSecurityScopedResource(); defer { if ok { u.stopAccessingSecurityScopedResource() } }
+            if let d = try? Data(contentsOf: u) { let n = store.importData(d); note = n > 0 ? "Restored \(n) face\(n == 1 ? "" : "s")." : "That file is not a face backup." }
+            else { note = "Could not read that file." }
+        }
+        .sheet(item: $shareURL) { u in ShareSheet(url: u) }
         .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $newName)
             Button("Save") { if let r = renaming, !newName.trimmingCharacters(in: .whitespaces).isEmpty { store.rename(r.id, newName) }; renaming = nil }
             Button("Cancel", role: .cancel) { renaming = nil }
         }
+    }
+
+    private func exportBackup() {
+        guard let d = store.exportData() else { return }
+        let u = FileManager.default.temporaryDirectory.appendingPathComponent("faces-backup.json")
+        do { try d.write(to: u, options: .atomic); shareURL = u } catch { note = "Backup failed." }
     }
 
     private func ingest(_ items: [PhotosPickerItem], into target: FaceLibrary.Entry?) async {
@@ -157,4 +180,12 @@ struct FacePickerSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
         }
     }
+}
+
+extension URL: @retroactive Identifiable { public var id: String { absoluteString } }
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: [url], applicationActivities: nil) }
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }

@@ -183,6 +183,15 @@ CacheManager.clear(root: croot, keep: croot.appendingPathComponent("c"))
 check(Set(CacheManager.entries(root: croot).map { $0.url.lastPathComponent }) == ["c"], "CacheManager.clear keeps only the active cache")
 try? FileManager.default.removeItem(at: croot)
 
+// CacheManager: keep matches by name even when built before the directory exists (no trailing slash difference)
+let kroot = FileManager.default.temporaryDirectory.appendingPathComponent("km-\(UUID().uuidString)")
+let kkeep = kroot.appendingPathComponent("active")          // URL built BEFORE the directory exists
+try! FileManager.default.createDirectory(at: kkeep, withIntermediateDirectories: true)
+try! Data(count: 500).write(to: kkeep.appendingPathComponent("f"))
+CacheManager.clear(root: kroot, keep: kkeep)
+check(FileManager.default.fileExists(atPath: kkeep.path), "CacheManager.clear never removes the active cache (URL built before mkdir)")
+try? FileManager.default.removeItem(at: kroot)
+
 // FaceLibrary
 let ldir = FileManager.default.temporaryDirectory.appendingPathComponent("fl-\(UUID().uuidString)")
 let lib = FaceLibrary(directory: ldir)
@@ -197,6 +206,17 @@ lib.rename(id: ent.id, to: "Renamed")
 let lib2 = FaceLibrary(directory: ldir)
 check(lib2.entries.first?.name == "Renamed" && lib2.entries.first?.photoCount == 2 && lib2.thumbnail(id: ent.id) == Data([1, 2, 3]), "FaceLibrary persists across reload")
 check(FaceLibrary.fingerprint(avg) == FaceLibrary.fingerprint(avg) && FaceLibrary.fingerprint(avg) != FaceLibrary.fingerprint(e1), "FaceLibrary fingerprint is stable and discriminating")
+// photo path and library path give a bit-identical averaged embedding (so the same cache identity)
+var raw = [Float](repeating: 0, count: 512); for i in 0..<512 { raw[i] = Float((i * 7919) % 101) / 37 - 1.3 }
+let photoPath = FaceLibrary.averaged([FaceLibrary.normalised(raw)])!
+let libTmp = FaceLibrary(directory: FileManager.default.temporaryDirectory.appendingPathComponent("fl2-\(UUID().uuidString)"))
+let ent2 = libTmp.add(name: "x", embedding: FaceLibrary.normalised(raw), thumbnailJPEG: nil)
+let libPath = FaceLibrary.averaged(libTmp.embeddings(id: ent2.id))!
+check(FaceLibrary.fingerprint(photoPath) == FaceLibrary.fingerprint(libPath), "photo path and saved-library path yield the same fingerprint")
+let backup = lib2.exportData()!
+let lib3 = FaceLibrary(directory: FileManager.default.temporaryDirectory.appendingPathComponent("fl3-\(UUID().uuidString)"))
+check(lib3.importData(backup) == 1 && lib3.entries.first?.name == "Renamed" && lib3.embeddings(id: lib3.entries[0].id).count == 2 && lib3.entries[0].id != ent.id, "FaceLibrary backup export/import round trip (new id, embeddings kept)")
+check(lib3.importData(Data([1, 2, 3])) == 0, "FaceLibrary import ignores garbage")
 lib2.delete(id: ent.id)
 check(lib2.entries.isEmpty && lib2.embeddings(id: ent.id).isEmpty && FaceLibrary(directory: ldir).entries.isEmpty, "FaceLibrary delete removes everything")
 try? FileManager.default.removeItem(at: ldir)

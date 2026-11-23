@@ -5,6 +5,10 @@ on:
     paths: ["app/**", "tools/ci-tests/**", ".github/workflows/build-ios.yml"]
   workflow_dispatch: {}
 
+concurrency:
+  group: build-ios
+  cancel-in-progress: true
+
 permissions:
   contents: write
 

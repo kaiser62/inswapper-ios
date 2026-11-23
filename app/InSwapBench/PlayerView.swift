@@ -61,7 +61,7 @@ final class PlayerVM: ObservableObject {
                 let pipe = try await SharedPipeline.get()
                 let r = try await Task.detached(priority: .userInitiated) { Box(v: try FaceIngest.embed(photo: data, pipeline: pipe)) }.value.v
                 sourceEmbedding = r.embedding; sourceThumb = r.thumb
-                sourceLatent = pipe.latent(fromEmbedding: r.embedding)
+                sourceLatent = pipe.latent(fromEmbeddings: [r.embedding])
                 sourceImage = ImageFile.cgImage(data: data, maxSide: 200)
                 prepare()
             } catch PipelineError.noFace { status = "No face found in the source photo." }
@@ -72,7 +72,7 @@ final class PlayerVM: ObservableObject {
     func setLibraryFace(_ e: FaceLibrary.Entry) {
         Task {
             guard let pipe = try? await SharedPipeline.get(), let lat = FaceStore.shared.latent(id: e.id, pipeline: pipe) else { status = "Could not load that face."; return }
-            AppLog.log("library face \(e.name)", "player")
+            AppLog.log("library face picked", "player")
             sourceLatent = lat; sourceEmbedding = nil; sourceThumb = nil
             sourceImage = FaceStore.shared.thumbnail(e.id)?.cgImage
             prepare()
@@ -101,6 +101,7 @@ final class PlayerVM: ObservableObject {
                 let identity = "\(Self.videoID(url))|\(FaceLibrary.fingerprint(latent))|\(reader.width)x\(reader.height)"
                 let dir = AppData.patchCacheRoot.appendingPathComponent(Self.hash(Data(identity.utf8)))
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                CacheManager.touch(dir)
                 CacheManager.enforce(root: AppData.patchCacheRoot, capBytes: AppData.cacheCapBytes, keep: dir)
                 let e = PlayerEngine(pipeline: pipe, reader: reader, latent: latent, cacheDirectory: dir, identity: identity)
                 e.mode = mode; e.combo = combo
