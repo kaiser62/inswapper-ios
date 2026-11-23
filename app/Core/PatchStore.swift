@@ -72,6 +72,73 @@ final class PatchStore {
         return out
     }
 
+    /// Approximate memory use (patch bytes only).
+    var bytes: Int { lock.lock(); defer { lock.unlock() }; return patches.values.reduce(0) { $0 + $1.count * (128 * 128 * 3 + 48) } + keys.count * 16 }
+
+    /// Drop frames furthest from `focus` until the store is at most `maxBytes`. Returns how many frames were dropped.
+    @discardableResult
+    func evict(maxBytes: Int, keepNear focus: Int64) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        var total = patches.values.reduce(0) { $0 + $1.count * (128 * 128 * 3 + 48) } + keys.count * 16
+        var dropped = 0
+        while total > maxBytes, let first = keys.first, let last = keys.last {
+            let k = abs(first - focus) >= abs(last - focus) ? first : last
+            total -= (patches[k]?.count ?? 0) * (128 * 128 * 3 + 48) + 16
+            patches[k] = nil
+            if k == first { keys.removeFirst() } else { keys.removeLast() }
+            dropped += 1
+        }
+        return dropped
+    }
+
+    // MARK: disk persistence (one file per video/face/decode-size; `identity` guards against stale caches)
+    private static let magic: UInt32 = 0x50545331  // "PTS1"
+
+    func save(to url: URL, identity: String) throws {
+        lock.lock(); let snapshot = keys.map { ($0, patches[$0]!) }; lock.unlock()
+        var d = Data()
+        func put<T>(_ v: T) { withUnsafeBytes(of: v) { d.append(contentsOf: $0) } }
+        put(Self.magic); put(Int64(frameDurationUs))
+        let id = Array(identity.utf8); put(UInt32(id.count)); d.append(contentsOf: id)
+        put(UInt32(snapshot.count))
+        for (k, ps) in snapshot {
+            put(k); put(UInt8(ps.count))
+            for p in ps { put(p.M.a); put(p.M.b); put(p.M.tx); put(p.M.c); put(p.M.d); put(p.M.ty); d.append(contentsOf: p.bgr) }
+        }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try d.write(to: url, options: .atomic)
+    }
+
+    /// Loads frames from a cache file; returns false (and loads nothing) if it is missing, corrupt or for another identity.
+    @discardableResult
+    func load(from url: URL, identity: String) -> Bool {
+        guard let d = try? Data(contentsOf: url, options: .mappedIfSafe) else { return false }
+        var o = 0
+        func get<T>(_ t: T.Type) -> T? {
+            guard o + MemoryLayout<T>.size <= d.count else { return nil }
+            defer { o += MemoryLayout<T>.size }
+            return d.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: o, as: T.self) }
+        }
+        guard get(UInt32.self) == Self.magic, get(Int64.self) == frameDurationUs, let n = get(UInt32.self),
+              o + Int(n) <= d.count, String(decoding: d[o..<(o + Int(n))], as: UTF8.self) == identity else { return false }
+        o += Int(n)
+        guard let count = get(UInt32.self) else { return false }
+        var loaded: [(Int64, [SwapPatch])] = []
+        for _ in 0..<count {
+            guard let k = get(Int64.self), let np = get(UInt8.self) else { return false }
+            var ps: [SwapPatch] = []
+            for _ in 0..<np {
+                guard let a = get(Double.self), let b = get(Double.self), let tx = get(Double.self), let c = get(Double.self),
+                      let dd = get(Double.self), let ty = get(Double.self), o + 128 * 128 * 3 <= d.count else { return false }
+                ps.append(SwapPatch(bgr: [UInt8](d[o..<(o + 128 * 128 * 3)]), M: Affine(a: a, b: b, tx: tx, c: c, d: dd, ty: ty)))
+                o += 128 * 128 * 3
+            }
+            loaded.append((k, ps))
+        }
+        for (k, ps) in loaded { put(pts: k, ps) }
+        return true
+    }
+
     func removeAll() { lock.lock(); patches = [:]; keys = []; lock.unlock() }
 
     private func nearestLocked(_ pts: Int64) -> Int64? {

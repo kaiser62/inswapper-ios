@@ -132,5 +132,22 @@ if let mc = MetalCompositor() {
     }
 } else { print("skip: no Metal device, Metal compositor tests not run") }
 
+// PatchStore cap + persistence
+let big2 = PatchStore(frameDurationUs: 40_000)
+let m1 = Affine(a: 1.5, b: -0.2, tx: 3, c: 0.2, d: 1.5, ty: -4)
+for i in 0..<10 { big2.put(pts: Int64(i * 40_000), [SwapPatch(bgr: [UInt8](repeating: UInt8(i), count: 128 * 128 * 3), M: m1)]) }
+let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("patchstore_test.bin")
+try! big2.save(to: tmp, identity: "vid|face|1280x720")
+let re = PatchStore(frameDurationUs: 40_000)
+check(!re.load(from: tmp, identity: "other") && re.count == 0, "PatchStore: wrong identity loads nothing")
+check(re.load(from: tmp, identity: "vid|face|1280x720") && re.count == 10, "PatchStore: save/load round trip count")
+let g0 = re.get(pts: 120_000)![0]
+check(g0.bgr[0] == 3 && g0.bgr.count == 128 * 128 * 3 && near(g0.M.a, 1.5) && near(g0.M.ty, -4), "PatchStore: round trip patch + matrix")
+check(!PatchStore(frameDurationUs: 41_000).load(from: tmp, identity: "vid|face|1280x720"), "PatchStore: frame duration mismatch rejected")
+try! Data([1, 2, 3]).write(to: tmp); check(!re.load(from: tmp, identity: "x"), "PatchStore: corrupt file rejected")
+let cap = 4 * (128 * 128 * 3 + 48 + 16)
+let dropped = big2.evict(maxBytes: cap, keepNear: 360_000)
+check(dropped == 6 && big2.count == 4 && big2.has(pts: 360_000) && big2.has(pts: 200_000) == false && big2.bytes <= cap, "PatchStore: eviction keeps frames nearest the playhead")
+
 print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)
