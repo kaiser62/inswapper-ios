@@ -12,12 +12,14 @@ struct InSwapBenchApp: App {
     }()
     var body: some Scene {
         WindowGroup {
+            if tab.hasPrefix("export-") { ExportPreview(kind: tab) } else {
             TabView(selection: $tab) {
                 PhotoView().tabItem { Label("Photo", systemImage: "face.smiling") }.tag("photo")
                 FacesView().tabItem { Label("Faces", systemImage: "person.2.crop.square.stack") }.tag("faces")
                 PlayerView().tabItem { Label("Player", systemImage: "play.rectangle") }.tag("player")
                 ContentView().tabItem { Label("Models & Bench", systemImage: "gauge") }.tag("bench")
                 LogsView().tabItem { Label("Logs", systemImage: "doc.plaintext") }.tag("logs")
+            }
             }
         }
     }

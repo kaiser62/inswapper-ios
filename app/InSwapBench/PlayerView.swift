@@ -187,10 +187,17 @@ final class PlayerVM: ObservableObject {
     // MARK: export
     var swapperName: String { fastSwapper && ModelStore.hasPal8 ? "8-bit" : "FP16" }
     private var swapsPerSecond: Double { (fastSwapper && ModelStore.hasPal8 ? 15.0 : 6.5) / Double((strength + 99) / 100) }
-    var exportPlan: ExportEngine.Plan? {
-        guard let e = engine else { return nil }
-        return ExportEngine(pipeline: e.pipeline, reader: e.reader, store: e.renderStore, latent: e.latent, strength: strength).plan()
+    /// Computed once when the sheet opens (not on every VM tick).
+    @Published var exportPlan: ExportEngine.Plan?
+    private var exportPending = false
+    func openExportSheet() {
+        guard let e = engine else { return }
+        exportPlan = ExportEngine(pipeline: e.pipeline, reader: e.reader, store: e.renderStore, latent: e.latent, strength: strength).plan()
+        showExportSheet = true
     }
+    /// Start was tapped: the export begins once the sheet has finished dismissing (a cover raised during a dismissal can be dropped).
+    func requestExportStart() { exportPending = true }
+    func sheetDismissed() { if exportPending { exportPending = false; startExport() } }
     var exportSwapsPerSecond: Double { swapsPerSecond }
     var exportFreeBytes: Int64 { VideoDownloader.freeBytes(at: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]) }
     /// Shuts the Player engine down (two writers must never share the patch store) and hands everything to the export.
@@ -211,7 +218,7 @@ final class PlayerVM: ObservableObject {
         AppLog.log("work \(on ? "on" : "paused") (active \(active), visible \(visible))", "player")
         engine?.workPaused = !on
         if !on { engine?.pause(); playing = false }
-        UIApplication.shared.isIdleTimerDisabled = on && engine != nil
+        UIApplication.shared.isIdleTimerDisabled = export.isRunning || (on && engine != nil)
     }
     func teardown() { AppData.openVideoFile = nil; timer?.invalidate(); engine?.shutdown(); engine = nil; UIApplication.shared.isIdleTimerDisabled = false }
 
@@ -291,10 +298,10 @@ struct PlayerView: View {
             }
             .navigationTitle("Player")
         }
-        .sheet(isPresented: $vm.showExportSheet) {
+        .sheet(isPresented: $vm.showExportSheet, onDismiss: { vm.sheetDismissed() }) {
             if let plan = vm.exportPlan {
                 ExportSheet(plan: plan, duration: vm.duration, swapsPerSecond: vm.exportSwapsPerSecond, strength: vm.strength,
-                            swapperName: vm.swapperName, freeBytes: vm.exportFreeBytes) { vm.startExport() }
+                            swapperName: vm.swapperName, freeBytes: vm.exportFreeBytes) { vm.requestExportStart() }
             }
         }
         .fullScreenCover(isPresented: $vm.showExportProgress) { ExportProgressView(session: vm.export) { vm.endExport() } }
@@ -340,7 +347,7 @@ struct PlayerView: View {
                 Text(String(format: "%d:%02d / %d:%02d", Int(vm.time) / 60, Int(vm.time) % 60, Int(vm.duration) / 60, Int(vm.duration) % 60))
                     .font(.system(.footnote, design: .monospaced))
                 Spacer()
-                Button("Export", systemImage: "square.and.arrow.up") { vm.showExportSheet = true }
+                Button("Export", systemImage: "square.and.arrow.up") { vm.openExportSheet() }
                     .buttonStyle(.bordered).font(.footnote)
             }
         }

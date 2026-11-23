@@ -41,6 +41,8 @@ final class ExportSession: ObservableObject {
     private var windowStart = Date(), windowDone = 0, windowPhase = ExportEngine.Phase.rendering
     private var renderRate = 0.0
     private var request: ExportRequest?
+    private var windowSeeded = false
+    private var thermalTimer: Timer?
 
     var isRunning: Bool { state == .running }
     /// 0...1 within the current phase.
@@ -56,7 +58,11 @@ final class ExportSession: ObservableObject {
         guard !isRunning else { return }
         request = r; control = ExportControl(); paused = false; saveMessage = nil; secondsLeft = nil
         phase = .rendering; done = 0; total = max(1, ExportEngine.estimatedFrames(reader: r.reader)); renderRate = 0
-        windowStart = Date(); windowDone = 0; windowPhase = .rendering
+        windowStart = Date(); windowDone = 0; windowPhase = .rendering; windowSeeded = false
+        thermalTimer?.invalidate()
+        thermalTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.thermal = ProcessInfo.processInfo.thermalState }
+        }
         state = .running
         UIApplication.shared.isIdleTimerDisabled = true
         let f = DateFormatter(); f.dateFormat = "yyyyMMdd-HHmmss"
@@ -70,9 +76,29 @@ final class ExportSession: ObservableObject {
                 let store = PatchStore(frameDurationUs: r.reader.frameDurationUs)
                 store.attach(directory: r.cacheDirectory, identity: r.identity)
                 let engine = ExportEngine(pipeline: r.pipeline, reader: r.reader, store: store, latent: r.latent, strength: r.strength)
-                try engine.run(to: out, cancel: c.cancel, gate: { c.gate() }, progress: { p in
-                    Task { @MainActor in self?.apply(p) }
-                })
+                // leaving the app can kill the asset reader / HEVC writer: wait until active again and resume (rendered frames are kept)
+                var attempt = 0
+                while true {
+                    do {
+                        try engine.run(to: out, cancel: c.cancel, gate: { c.gate() }, progress: { p in
+                            Task { @MainActor in self?.apply(p) }
+                        })
+                        break
+                    } catch let e as ExportEngine.ExportError {
+                        switch e { case .cancelled, .noSpace: throw e; default: break }
+                        attempt += 1; AppLog.log("export error (attempt \(attempt)): \(e)", "export")
+                        if attempt >= 3 { throw e }
+                        c.gate(); Thread.sleep(forTimeInterval: 1)
+                        if c.cancel.isCancelled { throw ExportEngine.ExportError.cancelled }
+                        Task { @MainActor in self?.restartWindow() }
+                    } catch {
+                        attempt += 1; AppLog.log("export error (attempt \(attempt)): \(error)", "export")
+                        if attempt >= 3 { throw error }
+                        c.gate(); Thread.sleep(forTimeInterval: 1)
+                        if c.cancel.isCancelled { throw ExportEngine.ExportError.cancelled }
+                        Task { @MainActor in self?.restartWindow() }
+                    }
+                }
                 Task { @MainActor in self?.finish(.done(out)) }
             } catch ExportEngine.ExportError.cancelled {
                 Task { @MainActor in self?.finish(.cancelled) }
@@ -84,6 +110,7 @@ final class ExportSession: ObservableObject {
 
     private func finish(_ s: State) {
         UIApplication.shared.isIdleTimerDisabled = false
+        thermalTimer?.invalidate(); thermalTimer = nil
         AppLog.log("export finished: \(s)", "export")
         state = s
     }
@@ -91,6 +118,7 @@ final class ExportSession: ObservableObject {
     private func apply(_ p: ExportEngine.Progress) {
         guard isRunning else { return }
         thermal = ProcessInfo.processInfo.thermalState
+        if !windowSeeded { windowSeeded = true; windowStart = Date(); windowDone = p.done }   // frames already on disk are not progress
         if p.phase != windowPhase { windowPhase = p.phase; windowStart = Date(); windowDone = p.done }
         phase = p.phase; done = p.done; total = max(1, p.total)
         let dt = Date().timeIntervalSince(windowStart), dn = p.done - windowDone
@@ -103,6 +131,11 @@ final class ExportSession: ObservableObject {
         }
     }
 
+    /// CI screenshots only (ExportPreview): put the session in a fixed state without running anything.
+    func debugSet(_ s: State, phase: ExportEngine.Phase, done: Int, total: Int, secondsLeft: Double?, thermal: ProcessInfo.ThermalState, paused: Bool = false) {
+        state = s; self.phase = phase; self.done = done; self.total = total; self.secondsLeft = secondsLeft; self.thermal = thermal; self.paused = paused
+    }
+    func restartWindow() { windowStart = Date(); windowDone = done; secondsLeft = nil }
     func setPaused(_ p: Bool) {
         paused = p; control.paused = p
         windowStart = Date(); windowDone = done; secondsLeft = nil   // restart the rate window after a pause
