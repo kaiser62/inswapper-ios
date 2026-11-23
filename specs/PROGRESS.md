@@ -138,3 +138,9 @@ Both are review-only guidance; no commands/fetches/settings changes. Installed t
 - Pipeline works: 5 screens x light/dark/xxl via `-uiPreview <tab>`; fetch with `gh run download <id> -n ui-screenshots`.
 - Player baseline problems seen: five stacked source buttons eat the top third; at xxl the "Source face" button is clipped off the right edge and the mode caption pushes controls below the tab bar; large nav title wastes space; no video area before a clip is chosen.
 - These feed the Player redesign (video pinned top, Video/Face chips, one settings sheet).
+
+## R5 step 3: export sheet + progress screen (build 45, commit 9436bb3)
+- New: ExportSession.swift (background export thread, pause/cancel/active flags, 3-attempt resume, rate window, thermal timer, Save to Photos), ExportSheet.swift (confirm), ExportProgressView.swift (two labelled phases, ETA, thermal, Pause/Cancel, result with Save/Share), ExportPreview.swift (CI stand-ins). Player: Export button beside transport; engine shut down for the export; Player re-prepares afterwards.
+- Advisor verdict: compiles != works. Fixed: auto-lock during export, retry after backgrounding, ETA window ignores already-rendered frames, thermal refresh timer, sheet->cover handoff via onDismiss, plan computed once.
+- Screenshots (run 45142643980) reviewed for sheet/running/done: fine at default and xxl.
+- NOT verified on device: end-to-end export, cancel+resume, home-screen excursion, Save to Photos, Share. Open: the 1 s pre-attach sleep is a guess; Exports folder is never pruned; ETA uses hardcoded 15/6.5 swaps/s.
