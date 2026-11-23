@@ -238,7 +238,7 @@ struct PlayerView: View {
                         Picker("Strength", selection: $vm.strength) {
                             Text("100").tag(100); Text("150").tag(150); Text("200").tag(200); Text("300").tag(300)
                         }.pickerStyle(.segmented)
-                        Text("Strength \(vm.strength): \((vm.strength + 99) / 100) swap pass\(vm.strength > 100 ? "es" : ""). Higher copies the source identity more strongly but renders slower. \(vm.costText)").font(.caption).foregroundStyle(.secondary)
+                        Text("Strength \(vm.strength): \((vm.strength + 99) / 100) swap pass\(vm.strength > 100 ? "es" : ""). Higher may copy the source identity a little more strongly but renders slower; compare on a paused frame. \(vm.costText)").font(.caption).foregroundStyle(.secondary)
                         Toggle("A + B fallback (live preview where not rendered yet)", isOn: $vm.combo).font(.footnote)
                         Text("A swaps every frame from the playhead in the background (about 3-5 min of work per minute of video) and shows the green parts of the bar fully swapped. Unrendered parts play raw. Cached on disk per video and face.")
                             .font(.caption).foregroundStyle(.secondary)

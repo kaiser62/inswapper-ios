@@ -34,6 +34,16 @@ Task {
                     cs = String(format: "%.3f", zip(e, srcEmb).reduce(0) { $0 + $1.0 * $1.1 })
                 }
                 print("t=\(t) hash \(fnv(p.bgr)) cosToSource \(cs) swap \(Int(ms)) ms")
+                #if NEWAPI
+                if t == 1.0 {   // blend path: 150 must be the per-byte mean of 100 and 200 (+-1)
+                    let a = try pipe.swap(frame: frame, face: f, latent: lat, strength: 100).bgr
+                    let b = try pipe.swap(frame: frame, face: f, latent: lat, strength: 150).bgr
+                    let c = try pipe.swap(frame: frame, face: f, latent: lat, strength: 200).bgr
+                    var worst = 0
+                    for i in 0..<b.count { worst = max(worst, abs(Int(b[i]) - (Int(a[i]) + Int(c[i]) + 1) / 2)) }
+                    print(worst <= 1 ? "ok: swap(150) == mean(100,200) max diff \(worst)" : "FAIL: blend mismatch max diff \(worst)")
+                }
+                #endif
                 n += 1; return false
             }
         }
