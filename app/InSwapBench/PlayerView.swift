@@ -214,12 +214,12 @@ struct PlayerView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        PhotosPicker(selection: $videoItem, matching: .videos, preferredItemEncoding: .current) { Label("Video", systemImage: "film") }.buttonStyle(.bordered)
-                        Button { importing = true } label: { Label("File", systemImage: "folder") }.buttonStyle(.bordered)
-                        Button { showVideos = true } label: { Label("Saved", systemImage: "play.square.stack") }.buttonStyle(.bordered)
-                        PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square") }.buttonStyle(.bordered)
-                        Button { showFaces = true } label: { Label("Library", systemImage: "person.2") }.buttonStyle(.bordered)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 8)], alignment: .leading, spacing: 8) {
+                        PhotosPicker(selection: $videoItem, matching: .videos, preferredItemEncoding: .current) { Label("Video", systemImage: "film") }.lineLimit(1).fixedSize(horizontal: true, vertical: false).buttonStyle(.bordered)
+                        Button { importing = true } label: { Label("File", systemImage: "folder") }.lineLimit(1).fixedSize(horizontal: true, vertical: false).buttonStyle(.bordered)
+                        Button { showVideos = true } label: { Label("Saved", systemImage: "play.square.stack") }.lineLimit(1).fixedSize(horizontal: true, vertical: false).buttonStyle(.bordered)
+                        PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square") }.lineLimit(1).fixedSize(horizontal: true, vertical: false).buttonStyle(.bordered)
+                        Button { showFaces = true } label: { Label("Library", systemImage: "person.2") }.lineLimit(1).fixedSize(horizontal: true, vertical: false).buttonStyle(.bordered)
                         if let img = vm.sourceImage { Image(decorative: img, scale: 1).resizable().scaledToFill().frame(width: 36, height: 36).clipShape(Circle()) }
                     }
                     if vm.canSaveSource { Button("Save this face to library") { vm.saveSourceToLibrary() }.font(.footnote) }
