@@ -8,11 +8,13 @@ import UniformTypeIdentifiers
 /// One FacePipeline (and one copy of the models in memory) shared by the Photo and Player tabs.
 enum SharedPipeline {
     private static let lock = NSLock()
-    private static var cached: FacePipeline?
-    static func get() async throws -> FacePipeline {
-        if let p = lock.withLock({ cached }) { return p }
-        let p = try await Task.detached(priority: .userInitiated) { Box(v: try FacePipeline(modelsDirectory: ModelStore.dir)) }.value.v
-        lock.withLock { cached = p }
+    private static var cached: [String: FacePipeline] = [:]
+    /// `fast` = the 8-bit palettized swapper (only if installed; otherwise the FP16 one).
+    static func get(fast: Bool = false) async throws -> FacePipeline {
+        let name = fast && ModelStore.hasPal8 ? "swapper_pal8" : "swapper"
+        if let c = lock.withLock({ cached[name] }) { return c }
+        let p = try await Task.detached(priority: .userInitiated) { Box(v: try FacePipeline(modelsDirectory: ModelStore.dir, swapperName: name)) }.value.v
+        lock.withLock { cached[name] = p }
         return p
     }
 }
@@ -40,12 +42,16 @@ final class PlayerVM: ObservableObject {
     @Published var strength: Int = { let v = UserDefaults.standard.integer(forKey: "strength"); return v == 0 ? 100 : v }() {
         didSet { UserDefaults.standard.set(strength, forKey: "strength"); if strength != oldValue, engine != nil { prepare() } }
     }
+    /// 8-bit palettized swapper (63 ms vs 149 ms on the phone). Off until compared by eye; needs swapper_pal8 imported.
+    @Published var fastSwapper: Bool = UserDefaults.standard.bool(forKey: "fastSwapper") && ModelStore.hasPal8 {
+        didSet { UserDefaults.standard.set(fastSwapper, forKey: "fastSwapper"); if fastSwapper != oldValue, engine != nil { prepare() } }
+    }
     var costText: String {
         guard let e = engine else { return "" }
         let passes = (strength + 99) / 100
         let fps = 1 / max(0.001, e.reader.frameDuration.seconds)
-        let minPerMin = fps / (6.5 / Double(passes))    // swaps/s on a cool phone (about 2.5 when hot)
-        return String(format: "≈ %.1f min of rendering per minute of video on a cool phone (about 2.5x slower when hot)", minPerMin)
+        let minPerMin = fps / ((fastSwapper ? 15.0 : 6.5) / Double(passes))    // swaps/s on a cool phone (about 2.5 when hot)
+        return String(format: "≈ %.1f min of rendering per minute of video on a cool phone (same speed when hot)", minPerMin)
     }
     @Published var time = 0.0
     @Published var duration = 0.0
@@ -115,10 +121,10 @@ final class PlayerVM: ObservableObject {
                 try? AVAudioSession.sharedInstance().setCategory(.playback)   // play through the silent switch
                 try? AVAudioSession.sharedInstance().setActive(true)
                 status = "Loading models (first load compiles for the Neural Engine and can take a while)…"
-                let pipe = try await SharedPipeline.get()
+                let pipe = try await SharedPipeline.get(fast: fastSwapper)
                 status = "Opening video…"
                 let reader = try await VideoReader(url: url)
-                let identity = "\(Self.videoID(url))|\(FaceLibrary.fingerprint(latent))|\(reader.width)x\(reader.height)" + (strength == 100 ? "" : "|s\(strength)")
+                let identity = "\(Self.videoID(url))|\(FaceLibrary.fingerprint(latent))|\(reader.width)x\(reader.height)" + (strength == 100 ? "" : "|s\(strength)") + (fastSwapper && ModelStore.hasPal8 ? "|q8" : "")
                 let dir = AppData.patchCacheRoot.appendingPathComponent(Self.hash(Data(identity.utf8)))
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 CacheManager.touch(dir)
@@ -235,6 +241,7 @@ struct PlayerView: View {
                         Text("B  Live preview").tag(PlayMode.livePreview)
                     }.pickerStyle(.segmented)
                     if vm.mode == .renderAhead {
+                        if ModelStore.hasPal8 { Toggle("Fast 8-bit swapper (2.4x faster; compare by eye)", isOn: $vm.fastSwapper).font(.footnote) }
                         Picker("Strength", selection: $vm.strength) {
                             Text("100").tag(100); Text("150").tag(150); Text("200").tag(200); Text("300").tag(300)
                         }.pickerStyle(.segmented)

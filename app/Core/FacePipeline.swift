@@ -37,13 +37,13 @@ final class FacePipeline {
         return try f()
     }
 
-    init(modelsDirectory dir: URL, computeUnits: MLComputeUnits = .cpuAndNeuralEngine) throws {
+    init(modelsDirectory dir: URL, computeUnits: MLComputeUnits = .cpuAndNeuralEngine, swapperName: String = "swapper") throws {
         let cfg = MLModelConfiguration(); cfg.computeUnits = computeUnits
         func load(_ n: String) throws -> MLModel { try MLModel(contentsOf: dir.appendingPathComponent(n + ".mlmodelc"), configuration: cfg) }
         scrfd = try load("scrfd")
         let cc = MLModelConfiguration(); cc.computeUnits = .cpuOnly
         scrfdCPU = try MLModel(contentsOf: dir.appendingPathComponent("scrfd.mlmodelc"), configuration: cc)
-        arcface = try load("arcface"); swapper = try load("swapper")
+        arcface = try load("arcface"); swapper = try load(swapperName)
         let data = try Data(contentsOf: dir.appendingPathComponent("emap.bin"))
         guard data.count == 512 * 512 * 4 else { throw PipelineError.badModel("emap.bin size") }
         emap = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }

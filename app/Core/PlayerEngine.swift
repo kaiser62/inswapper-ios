@@ -100,7 +100,7 @@ final class PlayerEngine {
 
     private func gate() {
         while workPaused || ProcessInfo.processInfo.thermalState == .critical { Thread.sleep(forTimeInterval: 0.2); if renderToken.isCancelled && liveToken.isCancelled { return } }
-        if ProcessInfo.processInfo.thermalState == .serious { Thread.sleep(forTimeInterval: 0.15) }
+        // No sleep at .serious: device test (build 36) showed the ANE holds full speed at serious (FP16 6.7/s, 8-bit 15.7/s for 5 min); the old 150 ms sleep was what cut swaps/s. Only .critical pauses (line above).
     }
     private func tick() { lock.lock(); windowCount += 1; lastTick = Date()
         let dt = Date().timeIntervalSince(windowStart)
