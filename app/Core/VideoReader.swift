@@ -55,7 +55,8 @@ final class VideoReader {
         guard reader.canAdd(out) else { throw VideoError.readerFailed("cannot add output") }
         reader.add(out)
         let fd = frameDurationUs, startUs = Int64((start * 1_000_000).rounded())
-        let readFrom = max(0, startUs - 2 * fd)
+        let durUs = Int64((duration * 1_000_000).rounded())
+        let readFrom = max(0, min(startUs, durUs - fd) - 2 * fd)   // clamp: a start at/after the end still yields the last frames
         reader.timeRange = CMTimeRange(start: CMTime(value: readFrom, timescale: 1_000_000), end: CMTime(seconds: duration, preferredTimescale: 600))
         guard reader.startReading() else { throw VideoError.readerFailed(reader.error?.localizedDescription ?? "startReading") }
         defer { if reader.status == .reading { reader.cancelReading() } }
@@ -63,7 +64,7 @@ final class VideoReader {
         var held: (CVPixelBuffer, Int64)?   // first sample, kept until the second shows whether it is the stamped duplicate
         var go = true
         func emit(_ pb: CVPixelBuffer, _ pts: Int64) throws {
-            if pts <= startUs - fd { return }  // before the frame that covers `start`
+            if pts <= min(startUs, durUs - fd) - fd { return }  // before the frame that covers `start`
             if try !handler(pb, pts) { go = false }
         }
         while go, let sb = out.copyNextSampleBuffer() {

@@ -24,9 +24,15 @@ final class LiveWorker {
             var ranToEnd = true
             try reader.read(from: begin) { frame, pts in
                 if cancel.isCancelled { ranToEnd = false; return false }
-                let target = PatchStore.us(playhead() + latency)
-                if pts > target + 750_000 || pts < PatchStore.us(playhead()) - 750_000 { ranToEnd = false; return false }  // seek: restart
-                if pts < target - reader.frameDurationUs / 2 { return true }  // behind the target: skip (decode only)
+                // Never swap a frame before it is due (frozen/slow playhead => idle, not full load); restart on a seek.
+                while true {
+                    if cancel.isCancelled { ranToEnd = false; return false }
+                    let ph = PatchStore.us(playhead()), target = ph + PatchStore.us(latency)
+                    if pts > target + 750_000 || pts < ph - 750_000 { ranToEnd = false; return false }  // seek: restart
+                    if pts < target - reader.frameDurationUs / 2 { return true }                          // behind: skip (decode only)
+                    if pts <= target + reader.frameDurationUs / 2 { break }                               // due now
+                    Thread.sleep(forTimeInterval: 0.01)                                                   // ahead: wait
+                }
                 let t0 = Date()
                 let face = try pipeline.detect(frame).max { $0.area < $1.area }
                 store.put(pts: pts, face.map { [try? pipeline.swap(frame: frame, face: $0, latent: latent)].compactMap { $0 } } ?? [])

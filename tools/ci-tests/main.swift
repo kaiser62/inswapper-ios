@@ -99,7 +99,7 @@ check(ps.count == 5, "PatchStore: 5 distinct frames")
 check(ps.get(displayedAt: 79_999) != nil && ps.get(displayedAt: 120_000)?.isEmpty == true && ps.get(displayedAt: 200_000) == nil && ps.get(displayedAt: 39_999) != nil && ps.get(displayedAt: -5) == nil, "PatchStore: displayed-at is a floor lookup")
 check(ps.has(pts: 41_000) && !ps.has(pts: 200_000), "PatchStore: has within half a frame only")
 check(ps.get(pts: 80_000)?.isEmpty == true && ps.get(pts: 200_000) == nil, "PatchStore: empty = processed, missing = nil")
-check(ps.latest(atOrBefore: 80_000) != nil && ps.latest(atOrBefore: -1) == nil, "PatchStore: latest skips empty entries")
+check(ps.latest(atOrBefore: 80_000)?.isEmpty == true && ps.latest(atOrBefore: -1) == nil && ps.latest(atOrBefore: 100_000)?.isEmpty == true && ps.latest(atOrBefore: 2_000_000) == nil, "PatchStore: latest returns the newest entry (empty = no face, no ghost) and expires by age")
 let rr = ps.renderedRanges()
 check(rr.count == 2 && rr[0] == 0...120_000 && rr[1] == 400_000...480_000, "PatchStore: rendered ranges join adjacent frames")
 let ct = CancelToken(); check(!ct.isCancelled, "CancelToken initial"); ct.cancel(); check(ct.isCancelled, "CancelToken cancelled")
@@ -132,22 +132,32 @@ if let mc = MetalCompositor() {
     }
 } else { print("skip: no Metal device, Metal compositor tests not run") }
 
-// PatchStore cap + persistence
-let big2 = PatchStore(frameDurationUs: 40_000)
+// PatchStore chunked persistence + eviction
+let tdir = FileManager.default.temporaryDirectory.appendingPathComponent("patchstore_test_\(getpid())")
+try? FileManager.default.removeItem(at: tdir)
 let m1 = Affine(a: 1.5, b: -0.2, tx: 3, c: 0.2, d: 1.5, ty: -4)
-for i in 0..<10 { big2.put(pts: Int64(i * 40_000), [SwapPatch(bgr: [UInt8](repeating: UInt8(i), count: 128 * 128 * 3), M: m1)]) }
-let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("patchstore_test.bin")
-try! big2.save(to: tmp, identity: "vid|face|1280x720")
-let re = PatchStore(frameDurationUs: 40_000)
-check(!re.load(from: tmp, identity: "other") && re.count == 0, "PatchStore: wrong identity loads nothing")
-check(re.load(from: tmp, identity: "vid|face|1280x720") && re.count == 10, "PatchStore: save/load round trip count")
-let g0 = re.get(pts: 120_000)![0]
-check(g0.bgr[0] == 3 && g0.bgr.count == 128 * 128 * 3 && near(g0.M.a, 1.5) && near(g0.M.ty, -4), "PatchStore: round trip patch + matrix")
-check(!PatchStore(frameDurationUs: 41_000).load(from: tmp, identity: "vid|face|1280x720"), "PatchStore: frame duration mismatch rejected")
-try! Data([1, 2, 3]).write(to: tmp); check(!re.load(from: tmp, identity: "x"), "PatchStore: corrupt file rejected")
-let cap = 4 * (128 * 128 * 3 + 48 + 16)
-let dropped = big2.evict(maxBytes: cap, keepNear: 360_000)
-check(dropped == 6 && big2.count == 4 && big2.has(pts: 360_000) && big2.has(pts: 200_000) == false && big2.bytes <= cap, "PatchStore: eviction keeps frames nearest the playhead")
+let fdur: Int64 = 40_000, span = fdur * PatchStore.chunkFrames
+let big2 = PatchStore(frameDurationUs: fdur)
+check(big2.attach(directory: tdir, identity: "vid|face|1280x720") == 0, "PatchStore: fresh directory is empty")
+for i in 0..<200 { big2.put(pts: Int64(i) * fdur, [SwapPatch(bgr: [UInt8](repeating: UInt8(i % 250), count: 128 * 128 * 3), M: m1)]) }
+let dropped = big2.evict(maxBytes: 80 * (128 * 128 * 3 + 64), keepNear: 190 * fdur)
+check(dropped > 0 && big2.bytes <= 80 * (128 * 128 * 3 + 64), "PatchStore: eviction drops chunks from RAM")
+check(big2.count == 200 && big2.has(pts: 5 * fdur) && big2.renderedRanges() == [0...(200 * fdur)], "PatchStore: evicted frames stay known (ranges intact)")
+let paged = big2.get(pts: 5 * fdur)
+check(paged?[0].bgr[0] == 5 && paged?[0].bgr.count == 128 * 128 * 3 && near(paged![0].M.a, 1.5), "PatchStore: evicted frame pages back in from disk")
+big2.flush()
+let re = PatchStore(frameDurationUs: fdur)
+check(re.attach(directory: tdir, identity: "vid|face|1280x720") == 200, "PatchStore: save after eviction + reload keeps ALL 200 frames")
+check(re.get(pts: 77 * fdur)?[0].bgr[0] == 77 && re.get(displayedAt: 77 * fdur + 5)?[0].bgr[0] == 77, "PatchStore: reloaded patches correct")
+re.put(pts: 200 * fdur, [])
+check(re.count == 201 && re.has(pts: 150 * fdur), "PatchStore: adding after reload merges")
+check(PatchStore(frameDurationUs: fdur).attach(directory: tdir, identity: "other face") == 0, "PatchStore: different identity wipes the cache")
+check(PatchStore(frameDurationUs: fdur).attach(directory: tdir, identity: "vid|face|1280x720") == 0, "PatchStore: (after wipe) nothing left")
+let noDir = PatchStore(frameDurationUs: fdur)
+for i in 0..<10 { noDir.put(pts: Int64(i) * fdur, [SwapPatch(bgr: [UInt8](repeating: 1, count: 128 * 128 * 3), M: m1)]) }
+check(noDir.evict(maxBytes: 0, keepNear: 0) == 10 && noDir.count == 0, "PatchStore: no directory => eviction forgets frames (Mode B)")
+try? FileManager.default.removeItem(at: tdir)
+_ = span
 
 print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)
