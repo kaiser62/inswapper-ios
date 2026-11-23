@@ -133,3 +133,8 @@ Thermal note: sustained use hits SERIOUS in ~2 min; no code fix planned beyond n
 - swiftui-accessibility-auditor — github.com/rgmez/apple-accessibility-skills @ 2fff4d8bcf82d5f1a99e31ac8fda72698d5ff3a3 (MIT)
 - apple-design-skill (dickwu): NOT installed — clone came back empty; no licence verified.
 Both are review-only guidance; no commands/fetches/settings changes. Installed to ~/.claude/skills/.
+
+## UI screenshot baseline (screenshots workflow run 45139749514, placeholder content, 393 pt sim)
+- Pipeline works: 5 screens x light/dark/xxl via `-uiPreview <tab>`; fetch with `gh run download <id> -n ui-screenshots`.
+- Player baseline problems seen: five stacked source buttons eat the top third; at xxl the "Source face" button is clipped off the right edge and the mode caption pushes controls below the tab bar; large nav title wastes space; no video area before a clip is chosen.
+- These feed the Player redesign (video pinned top, Video/Face chips, one settings sheet).
