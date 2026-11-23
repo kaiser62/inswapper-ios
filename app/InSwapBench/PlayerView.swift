@@ -228,7 +228,7 @@ struct PlayerView: View {
     }
 }
 
-enum DisplayStats { @MainActor static var noDrawable = 0, presentFail = 0 }
+enum DisplayStats { nonisolated(unsafe) static var noDrawable = 0, presentFail = 0 }
 
 struct MetalVideoView: UIViewRepresentable {
     let engine: PlayerEngine
