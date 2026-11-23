@@ -189,3 +189,93 @@ struct ShareSheet: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: [url], applicationActivities: nil) }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
+
+// MARK: - video library UI
+
+@MainActor
+final class VideoStore: ObservableObject {
+    static let shared = VideoStore()
+    let lib = VideoLibrary(directory: AppData.support.appendingPathComponent("videos"))
+    private let downloader = VideoDownloader()
+    @Published private(set) var entries: [VideoLibrary.Entry] = []
+    @Published var message = ""
+    @Published var progress: Double?      // 0...1 while downloading
+    @Published var busy = false
+    init() { entries = lib.entries }
+    private func refresh() { entries = lib.entries }
+    var totalMB: Double { Double(lib.totalBytes) / 1e6 }
+
+    func url(_ e: VideoLibrary.Entry) -> URL { lib.url(of: e) }
+    func thumbnail(_ e: VideoLibrary.Entry) -> UIImage? { UIImage(contentsOfFile: lib.thumbnailURL(of: e).path) }
+    func delete(_ e: VideoLibrary.Entry) { lib.delete(id: e.id); refresh() }
+
+    /// Moves a temp file (Photos / Files pick) into the library and returns its entry.
+    func importFile(_ url: URL, title: String, source: String) async -> VideoLibrary.Entry? {
+        do { let e = try await lib.add(moving: url, title: title, source: source); refresh(); return e }
+        catch { message = error.localizedDescription; AppLog.log("import failed: \(error.localizedDescription)", "videos"); return nil }
+    }
+
+    /// Downloads a direct https link. Returns the new entry, or nil (message explains).
+    func download(_ text: String) async -> VideoLibrary.Entry? {
+        guard !busy else { return nil }
+        guard let u = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) else { message = "That is not a valid link."; return nil }
+        busy = true; progress = 0; message = "Downloading…"
+        defer { busy = false; progress = nil }
+        AppLog.log("download \(VideoDownloader.safeName(u))", "videos")
+        do {
+            let f = try await downloader.download(u) { [weak self] w, t in
+                Task { @MainActor in if t > 0 { self?.progress = Double(w) / Double(t) } }
+            }
+            message = "Checking the video…"
+            let e = try await lib.add(moving: f, title: u.deletingPathExtension().lastPathComponent, source: u.host ?? "web")
+            refresh(); message = "Added."
+            return e
+        } catch {
+            message = error.localizedDescription + (downloader.canResume ? " Tap Download again to resume." : "")
+            AppLog.log("download failed: \(error.localizedDescription)", "videos")
+            return nil
+        }
+    }
+    func cancelDownload() { downloader.cancel() }
+}
+
+struct VideoLibrarySheet: View {
+    @ObservedObject private var store = VideoStore.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var link = ""
+    let onPick: (VideoLibrary.Entry) -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Add from a link") {
+                    TextField("https://…/video.mp4", text: $link).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                    HStack {
+                        Button("Download") { Task { if let e = await store.download(link) { link = ""; onPick(e); dismiss() } } }.disabled(store.busy || link.isEmpty)
+                        if store.busy { Button("Cancel", role: .destructive) { store.cancelDownload() } }
+                    }
+                    if let p = store.progress { ProgressView(value: p) }
+                    if !store.message.isEmpty { Text(store.message).font(.footnote).foregroundStyle(.secondary) }
+                    Text("Direct links to .mp4 / .mov / .m4v files only (https). Use videos you have the right to use.").font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Saved videos (\(String(format: "%.0f", store.totalMB)) MB)") {
+                    if store.entries.isEmpty { Text("Nothing yet.").foregroundStyle(.secondary) }
+                    ForEach(store.entries) { e in
+                        Button { onPick(e); dismiss() } label: {
+                            HStack {
+                                Group { if let t = store.thumbnail(e) { Image(uiImage: t).resizable().scaledToFill() } else { Color.gray.opacity(0.3) } }
+                                    .frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 6))
+                                VStack(alignment: .leading) {
+                                    Text(e.title).lineLimit(1)
+                                    Text("\(e.width)×\(e.height) · \(Int(e.duration)) s · \(String(format: "%.0f", Double(e.bytes) / 1e6)) MB · \(e.source)").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }.buttonStyle(.plain)
+                    }.onDelete { idx in idx.map { store.entries[$0] }.forEach { store.delete($0) } }
+                }
+            }
+            .navigationTitle("Videos")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+        }
+    }
+}

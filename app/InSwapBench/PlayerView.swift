@@ -51,7 +51,15 @@ final class PlayerVM: ObservableObject {
     @Published var diagnostics = ""
     static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
 
-    func setVideo(_ url: URL) { AppLog.log("video picked \(url.lastPathComponent)", "player"); videoURL = url; prepare() }
+    /// A temp file from Photos / Files: moved into the library (so it is counted and listed), then opened.
+    func importVideo(_ url: URL, source: String) {
+        status = "Importing video…"
+        Task {
+            if let e = await VideoStore.shared.importFile(url, title: "Video \(VideoStore.shared.entries.count + 1)", source: source) { setLibraryVideo(e) }
+            else { status = VideoStore.shared.message }
+        }
+    }
+    func setLibraryVideo(_ e: VideoLibrary.Entry) { AppLog.log("video opened (\(e.width)x\(e.height), \(Int(e.duration)) s, from \(e.source))", "player"); videoURL = VideoStore.shared.url(e); prepare() }
     /// A source photo: detect, embed, derive the latent (also kept so it can be saved to the library).
     func setSource(_ data: Data) {
         AppLog.log("source photo picked \(data.count) bytes", "player")
@@ -187,6 +195,7 @@ struct PlayerView: View {
     @State private var srcItem: PhotosPickerItem?
     @State private var importing = false
     @State private var showFaces = false
+    @State private var showVideos = false
     @State private var cacheText = ""
 
     var body: some View {
@@ -196,6 +205,7 @@ struct PlayerView: View {
                     HStack {
                         PhotosPicker(selection: $videoItem, matching: .videos, preferredItemEncoding: .current) { Label("Video", systemImage: "film") }.buttonStyle(.bordered)
                         Button { importing = true } label: { Label("File", systemImage: "folder") }.buttonStyle(.bordered)
+                        Button { showVideos = true } label: { Label("Saved", systemImage: "play.square.stack") }.buttonStyle(.bordered)
                         PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square") }.buttonStyle(.bordered)
                         Button { showFaces = true } label: { Label("Library", systemImage: "person.2") }.buttonStyle(.bordered)
                         if let img = vm.sourceImage { Image(decorative: img, scale: 1).resizable().scaledToFill().frame(width: 36, height: 36).clipShape(Circle()) }
@@ -233,10 +243,11 @@ struct PlayerView: View {
             }
             .navigationTitle("Player")
         }
+        .sheet(isPresented: $showVideos) { VideoLibrarySheet { vm.setLibraryVideo($0) } }
         .sheet(isPresented: $showFaces) { FacePickerSheet { vm.setLibraryFace($0) } }
         .onChange(of: videoItem) { _, item in
             guard let item else { return }
-            Task { if let m = try? await item.loadTransferable(type: MovieFile.self) { vm.setVideo(m.url) } else { vm.status = "Could not load that video." } }
+            Task { if let m = try? await item.loadTransferable(type: MovieFile.self) { vm.importVideo(m.url, source: "Photos") } else { vm.status = "Could not load that video." } }
         }
         .onChange(of: srcItem) { _, item in
             guard let item else { return }
@@ -247,7 +258,7 @@ struct PlayerView: View {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             let dst = FileManager.default.temporaryDirectory.appendingPathComponent("video-\(UUID().uuidString).\(url.pathExtension)")
-            do { try FileManager.default.copyItem(at: url, to: dst); vm.setVideo(dst) } catch { vm.status = "Could not open that file: \(error.localizedDescription)" }
+            do { try FileManager.default.copyItem(at: url, to: dst); vm.importVideo(dst, source: "Files") } catch { vm.status = "Could not open that file: \(error.localizedDescription)" }
         }
         .onChange(of: scenePhase) { _, phase in vm.setActive(phase == .active) }
         .onDisappear { vm.setVisible(false) }   // switching tabs pauses playback and the swap workers
