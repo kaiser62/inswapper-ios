@@ -256,6 +256,11 @@ struct VideoLibrarySheet: View {
                 Section("Add from a link") {
                     TextField("https://…/video.mp4", text: $link).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                     HStack {
+                        Button("Paste") { if let t = UIPasteboard.general.string { link = t } }
+                        Spacer()
+                        Button("Try an example") { link = "https://assets.mixkit.co/videos/2960/2960-720.mp4" }
+                    }.font(.footnote)
+                    HStack {
                         Button("Download") { Task { if let e = await store.download(link) { link = ""; onPick(e); dismiss() } } }.disabled(store.busy || link.isEmpty)
                         if store.busy { Button("Cancel", role: .destructive) { store.cancelDownload() } }
                     }

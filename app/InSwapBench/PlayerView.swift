@@ -330,6 +330,8 @@ struct MetalVideoView: UIViewRepresentable {
         @objc func tick() {
             // No GPU submissions unless the app is active (background submits fail with BackgroundExecutionNotPermitted).
             guard UIApplication.shared.applicationState == .active else { lastKey = nil; return }
+            // Off screen (another tab) the layer can lose its content: forget what was drawn so the next visible tick redraws.
+            guard let v0 = view, v0.window != nil, !v0.isHidden else { lastKey = nil; return }
             guard let view, let (frame, t) = engine.nextFrame(hostTime: CACurrentMediaTime()) else { return }
             let patches = engine.patches(at: t)
             // Skip redrawing an identical image (paused, no new patch): the layer keeps the last presented frame.
