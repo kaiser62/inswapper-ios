@@ -43,16 +43,33 @@ struct PlayerStage<Video: View>: View {
         VStack(spacing: 0) {
             PlayerScrubber(time: state.time, duration: state.duration, ranges: state.ranges,
                            onScrub: actions.scrub, onStart: actions.scrubStart, onEnd: actions.scrubEnd)
-            HStack {
-                Button(state.playing ? "Pause" : "Play", systemImage: state.playing ? "pause.fill" : "play.fill", action: actions.togglePlay)
-                    .labelStyle(.iconOnly).font(.title2).frame(minWidth: Theme.hit, minHeight: Theme.hit)
-                Text("\(PlayerScrubber.clock(state.time)) / \(PlayerScrubber.clock(state.duration))")
-                    .font(.footnote.monospacedDigit())
+            HStack(spacing: Theme.gap) {
+                Text(PlayerScrubber.clock(state.time)).font(.footnote.monospacedDigit())
                 Spacer()
+                skip("Back 5 seconds", "gobackward.5", -5)
+                Button(state.playing ? "Pause" : "Play", systemImage: state.playing ? "pause.fill" : "play.fill", action: actions.togglePlay)
+                    .labelStyle(.iconOnly).font(.title3)
+                    .foregroundStyle(Theme.background)
+                    .frame(width: Theme.hit, height: Theme.hit)
+                    .background(Theme.accent, in: Circle())
+                    .shadow(color: Theme.accent.opacity(0.25), radius: 6, y: 2)
+                skip("Forward 5 seconds", "goforward.5", 5)
+                Spacer()
+                Text(PlayerScrubber.clock(state.duration)).font(.footnote.monospacedDigit())
             }
         }
         .padding(.horizontal, Theme.gap)
         .background(LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom).padding(.top, -Theme.pad * 2))
         .foregroundStyle(.white)
+    }
+
+    private func skip(_ label: String, _ symbol: String, _ delta: Double) -> some View {
+        Button(label, systemImage: symbol) {
+            actions.scrubStart()
+            actions.scrub(min(max(0, state.time + delta), state.duration))
+            actions.scrubEnd()
+        }
+        .labelStyle(.iconOnly).font(.title3)
+        .frame(minWidth: Theme.hit, minHeight: Theme.hit)
     }
 }
