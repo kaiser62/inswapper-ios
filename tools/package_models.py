@@ -61,3 +61,20 @@ with zipfile.ZipFile(zp, "w", zipfile.ZIP_STORED) as z:  # stored: weights barel
         if f.is_file():
             z.write(f, f.relative_to(stage))
 print(zp, round(zp.stat().st_size / 1e6, 1), "MB")
+
+# Optional experiment zip: 8-bit palettized swapper only (perf research E2). Built when tools/models/exp/swapper_pal8.mlpackage exists.
+pal = ROOT / "exp" / "swapper_pal8.mlpackage"
+if pal.exists():
+    st2 = ROOT / "stage_pal8"
+    if st2.exists():
+        shutil.rmtree(st2)
+    st2.mkdir()
+    shutil.copytree(pal, st2 / "swapper_pal8.mlpackage")
+    (st2 / "manifest.json").write_text(json.dumps({"format_version": FORMAT_VERSION, "note": "experiment: swapper_pal8 only"}, indent=2))
+    zp2 = ROOT / "swapper_pal8.zip"
+    if zp2.exists():
+        zp2.unlink()
+    with zipfile.ZipFile(zp2, "w", zipfile.ZIP_STORED) as z:
+        for f in sorted(st2.rglob("*")):
+            z.write(f, f.relative_to(st2))
+    print("wrote", zp2)

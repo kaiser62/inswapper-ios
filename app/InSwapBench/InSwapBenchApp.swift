@@ -39,6 +39,15 @@ final class VM: ObservableObject {
         }
     }
 
+    func run(_ job: @escaping (@escaping (String) -> Void) async -> Void) {
+        busy = true
+        output = ""
+        Task.detached(priority: .userInitiated) {
+            await job { msg in Task { @MainActor in self.append(msg) } }
+            await MainActor.run { self.busy = false }
+        }
+    }
+
     func runBench() {
         busy = true
         output = ""
@@ -58,12 +67,19 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(vm.installed ? "Models installed" : "No models yet: import models.zip")
                     .font(.subheadline)
-                HStack {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
                     Button("Import models.zip") { picking = true }
                         .buttonStyle(.borderedProminent).disabled(vm.busy)
                     Button("Run benchmark") { vm.runBench() }
                         .buttonStyle(.bordered).disabled(vm.busy || !vm.installed)
+                    Button("Compare 8-bit swapper") { vm.run { log in await Bench.swapperCompare(log: log) } }
+                        .buttonStyle(.bordered).disabled(vm.busy || !vm.installed)
+                    Button("5 min FP16") { vm.run { log in await Bench.sustainedSwapper("swapper", seconds: 300, log: log) } }
+                        .buttonStyle(.bordered).disabled(vm.busy || !vm.installed)
+                    Button("5 min 8-bit") { vm.run { log in await Bench.sustainedSwapper("swapper_pal8", seconds: 300, log: log) } }
+                        .buttonStyle(.bordered).disabled(vm.busy || !vm.installed)
                 }
+                Text("8-bit experiment: import swapper_pal8.zip with the same button. Let the phone cool for a few minutes between the two 5-minute runs.").font(.caption).foregroundStyle(.secondary)
                 Button("Copy results") { UIPasteboard.general.string = vm.output }
                     .buttonStyle(.bordered)
                 ScrollView {

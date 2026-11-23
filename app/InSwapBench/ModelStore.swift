@@ -11,6 +11,9 @@ struct ImportError: LocalizedError {
 
 enum ModelStore {
     static let names = ["scrfd", "arcface", "swapper"]
+    /// Optional experiment models (perf research E2): 8-bit palettized swapper. Imported from the same kind of zip; the zip may hold only these.
+    static let optionalNames = ["swapper_pal8"]
+    static var hasPal8: Bool { FileManager.default.fileExists(atPath: compiledURL("swapper_pal8").path) }
 
     static var dir: URL {
         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -52,7 +55,12 @@ enum ModelStore {
             throw ImportError(message: "Unsupported models.zip format_version \(manifest.format_version) (expected 1)")
         }
 
-        for n in names {
+        let present = (names + optionalNames).filter { fm.fileExists(atPath: unz.appendingPathComponent("\($0).mlpackage").path) }
+        guard !present.isEmpty else { throw ImportError(message: "The zip contains no model packages.") }
+        for n in names where !present.contains(n) && !fm.fileExists(atPath: compiledURL(n).path) {
+            throw ImportError(message: "\(n).mlpackage is missing from the zip and not installed yet.")
+        }
+        for n in present {
             let t0 = Date()
             log("compiling \(n)…")
             let compiled = try await MLModel.compileModel(at: unz.appendingPathComponent("\(n).mlpackage"))
@@ -61,7 +69,7 @@ enum ModelStore {
             try fm.moveItem(at: compiled, to: dest)   // compileModel output is temporary: move it out
             log(String(format: "compiled %@ in %.1f s", n, Date().timeIntervalSince(t0)))
         }
-        for f in ["emap.bin", "manifest.json"] {
+        for f in ["emap.bin", "manifest.json"] where fm.fileExists(atPath: unz.appendingPathComponent(f).path) {
             let dest = dir.appendingPathComponent(f)
             if fm.fileExists(atPath: dest.path) { try fm.removeItem(at: dest) }
             try fm.copyItem(at: unz.appendingPathComponent(f), to: dest)

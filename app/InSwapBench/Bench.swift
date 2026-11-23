@@ -205,6 +205,54 @@ enum Bench {
         }
     }
 
+    /// E2: FP16 swapper vs 8-bit palettized swapper on the ANE: latency, output difference on the same input, 8-bit placement.
+    static func swapperCompare(log: @escaping (String) -> Void) async {
+        log("\n== swapper compare: FP16 vs 8-bit palettized (cpuAndNeuralEngine, 40 swaps each)")
+        guard ModelStore.hasPal8 else { log("swapper_pal8 not installed: import swapper_pal8.zip first"); return }
+        do {
+            let si = try input(for: "swapper")
+            var outs: [[Float]] = []
+            for name in ["swapper", "swapper_pal8"] {
+                let t0 = nowMs()
+                let m = try load(name, .cpuAndNeuralEngine)
+                for _ in 0..<3 { _ = try await m.prediction(from: si) }
+                log(String(format: "%@: load+warmup %.0f ms", name, nowMs() - t0))
+                var ts: [Double] = []
+                for _ in 0..<40 { let t = nowMs(); _ = try await m.prediction(from: si); ts.append(nowMs() - t) }
+                let st = stats(ts)
+                log(String(format: "%@: mean %.1f ms  p95 %.1f ms  thermal %@", name, st.mean, st.p95, thermal()))
+                if let o = try await m.prediction(from: si).featureValue(for: "swapped")?.multiArrayValue { outs.append(o.toFloats()) }
+                if #available(iOS 17.4, *) { log("\(name) placement: " + ((try? await placement(name)) ?? "?")) }
+            }
+            if outs.count == 2, outs[0].count == outs[1].count {
+                var sum: Float = 0, mx: Float = 0
+                for i in 0..<outs[0].count { let d = abs(outs[0][i] - outs[1][i]) * 255; sum += d; mx = max(mx, d) }
+                log(String(format: "output difference (synthetic input): mean %.3f max %.1f of 255 (Mac with a real crop: mean 0.6-0.8, max 9)", sum / Float(outs[0].count), mx))
+            }
+        } catch { log("swapper compare FAILED \(error.localizedDescription)") }
+    }
+
+    /// E4: swapper only, back to back, `seconds` long, logging swaps/s and thermal state every 15 s.
+    static func sustainedSwapper(_ name: String, seconds: Int, log: @escaping (String) -> Void) async {
+        log("\n== sustained \(seconds) s: \(name) back to back, cpuAndNeuralEngine")
+        await MainActor.run { UIApplication.shared.isIdleTimerDisabled = true }
+        do {
+            let m = try load(name, .cpuAndNeuralEngine), si = try input(for: "swapper")
+            for _ in 0..<3 { _ = try await m.prediction(from: si) }
+            let start = nowMs(); var n = 0, last = 0; var lastLog = start
+            while nowMs() - start < Double(seconds) * 1000 {
+                _ = try await m.prediction(from: si); n += 1
+                let t = nowMs()
+                if t - lastLog >= 15_000 {
+                    log(String(format: "t=%3.0fs  %.2f swaps/s  thermal %@", (t - start) / 1000, Double(n - last) / ((t - lastLog) / 1000), thermal()))
+                    lastLog = t; last = n
+                }
+            }
+            log(String(format: "average %.2f swaps/s over %d s, final thermal %@", Double(n) / Double(seconds), seconds, thermal()))
+        } catch { log("sustained FAILED \(error.localizedDescription)") }
+        await MainActor.run { UIApplication.shared.isIdleTimerDisabled = false }
+    }
+
     @available(iOS 17.4, *)
     static func placement(_ name: String) async throws -> String {
         let cfg = MLModelConfiguration()
