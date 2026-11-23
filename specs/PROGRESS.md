@@ -96,3 +96,7 @@ Sustained 60 s (scrfd + swapper every frame, ANE): 6.6 fps flat, thermal nominal
 
 ## Black video root cause on device (2026-11-23, build 27 log)
 - Frames decode fine (centre-pixel sample varies, item ready, hdr false); every tick got nextDrawable() == nil (drawable-nil == ticks, presented 0, no GPU errors). So the HDR/composition theory was wrong. Likely layer.drawableSize reset to 0 by layout. Fix: set layer.drawableSize to the frame size every tick, log layer state on failure.
+
+## Device result: video works (2026-11-23, build 29)
+- After uninstall + reinstall + re-import models the Player shows video, Mode B ~6.4 swaps/s, Mode A renders ahead (6.5/s) and seeks restart correctly. (Unclear whether the drawableSize fix or the clean install fixed the black screen; both changed.)
+- Log findings: (1) GPU submits while app inactive -> 36 BackgroundExecutionNotPermitted errors + render reader "Operation Interrupted" (retry recovered). Fix: tick() returns unless applicationState == .active. (2) Display redrew identical frames at 25-60/s when paused: now skipped via content key. (3) Thermal SERIOUS after ~2 min of continuous use; swaps fall from 6.4 to ~2.4/s (gate sleeps 150 ms/frame at serious). Sustained Mode A/B is thermally limited; user-visible rate depends on the phone staying cool. (4) Log snapshot interval 2 s -> 10 s.

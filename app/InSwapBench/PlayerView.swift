@@ -110,7 +110,7 @@ final class PlayerVM: ObservableObject {
         statsText = String(format: "%.1f swaps/s · latency %.0f ms · cached %d frames (%.0f MB) · thermal %@",
                            s.swapsPerSecond, s.latencyMs, s.cachedFrames, s.cacheMB, Self.thermalName(s.thermal))
         let ps = presenter
-        defer { logTick += 1; if logTick % 8 == 0 { AppLog.log(diagnostics.replacingOccurrences(of: "\n", with: " | "), "player") } }
+        defer { logTick += 1; if logTick % 40 == 0 { AppLog.log(diagnostics.replacingOccurrences(of: "\n", with: " | "), "player") } }
         diagnostics = "build \(Self.build) · mode \(mode.rawValue)\(combo ? "+B" : "") · video \(e.reader.width)x\(e.reader.height) \(String(format: "%.1f", e.duration)) s · t=\(String(format: "%.2f", e.currentTime))\n"
             + statsText + "\npresented \(ps?.presented ?? 0), skipped \(ps?.skipped ?? 0) · ranges \(ranges.count) · retries \(s.retries)"
             + "\ndisplay: ticks \(e.dispTicks) new \(e.dispNew) noFrame \(e.dispNone) · drawable-nil \(DisplayStats.noDrawable) · no-texture/busy \(DisplayStats.presentFail) · gpu-errors \(ps?.gpuErrors ?? 0) (\(ps?.lastGPUError ?? "-"))\nframe \(e.frameSize) \(e.frameSample) · drawable \(ps?.lastDstSize ?? "-")\n\(e.itemInfo)"
@@ -267,8 +267,18 @@ struct MetalVideoView: UIViewRepresentable {
             link = l
         }
         func stop() { link?.invalidate(); link = nil }
+        private var lastKey: Int?
         @objc func tick() {
+            // No GPU submissions unless the app is active (background submits fail with BackgroundExecutionNotPermitted).
+            guard UIApplication.shared.applicationState == .active else { lastKey = nil; return }
             guard let view, let (frame, t) = engine.nextFrame(hostTime: CACurrentMediaTime()) else { return }
+            let patches = engine.patches(at: t)
+            // Skip redrawing an identical image (paused, no new patch): the layer keeps the last presented frame.
+            var h = Hasher()
+            h.combine(Int(bitPattern: Unmanaged.passUnretained(frame).toOpaque()))
+            for p in patches { h.combine(p.M.tx); h.combine(p.M.ty); h.combine(p.M.a); h.combine(p.M.b); for v in p.bgr.prefix(48) { h.combine(v) } }
+            let key = h.finalize()
+            if key == lastKey { return }
             let layer = view.layer as? CAMetalLayer
             let want = CGSize(width: CVPixelBufferGetWidth(frame), height: CVPixelBufferGetHeight(frame))
             if let layer, layer.drawableSize != want { layer.drawableSize = want }   // layout can reset it to 0 (no drawable then)
@@ -280,7 +290,7 @@ struct MetalVideoView: UIViewRepresentable {
                 return
             }
             if DisplayStats.firstDrawable { DisplayStats.firstDrawable = false; AppLog.log("first drawable \(drawable.texture.width)x\(drawable.texture.height)", "display") }
-            if !presenter.present(frame: frame, patches: engine.patches(at: t), to: drawable.texture, drawable: drawable) { DisplayStats.presentFail += 1 }
+            if presenter.present(frame: frame, patches: patches, to: drawable.texture, drawable: drawable) { lastKey = key } else { DisplayStats.presentFail += 1 }
         }
     }
 }
