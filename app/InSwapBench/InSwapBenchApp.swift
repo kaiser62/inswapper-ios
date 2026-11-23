@@ -4,23 +4,41 @@ import UniformTypeIdentifiers
 @main
 struct InSwapBenchApp: App {
     init() { AppLog.log("launch build \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?") · \(ProcessInfo.processInfo.operatingSystemVersionString) · thermal \(ProcessInfo.processInfo.thermalState.rawValue)", "app") }
-    /// `-uiPreview <screen>` (CI screenshots, see .github/workflows/screenshots.yml) opens that tab at launch. Screens: photo faces player bench logs.
-    @State private var tab: String = {
+    /// `-uiPreview <screen>` (CI screenshots, see .github/workflows/screenshots.yml) opens that screen at launch.
+    /// Screens: player photo library library-videos settings bench logs, plus the player-* and export-* stand-ins.
+    private static let preview: String? = {
         let a = ProcessInfo.processInfo.arguments
         if let i = a.firstIndex(of: "-uiPreview"), i + 1 < a.count { return a[i + 1] }
-        return "player"
+        return nil
     }()
+    @StateObject private var router = AppRouter(tab: InSwapBenchApp.startTab)
+
+    private static var startTab: AppTab {
+        switch preview {
+        case "photo": return .photo
+        case "library", "library-videos", "faces": return .library
+        case "settings", "bench", "logs": return .settings
+        default: return .player
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
-            if tab.hasPrefix("export-") { ExportPreview(kind: tab).preferredColorScheme(.dark) } else if tab.hasPrefix("player-") { PlayerPreview(kind: tab).preferredColorScheme(.dark) } else {
-            TabView(selection: $tab) {
-                PhotoView().tabItem { Label("Photo", systemImage: "face.smiling") }.tag("photo")
-                FacesView().tabItem { Label("Faces", systemImage: "person.2.crop.square.stack") }.tag("faces")
-                PlayerView().tabItem { Label("Player", systemImage: "play.rectangle") }.tag("player")
-                ContentView().tabItem { Label("Models & Bench", systemImage: "gauge") }.tag("bench")
-                LogsView().tabItem { Label("Logs", systemImage: "doc.plaintext") }.tag("logs")
-            }
-            .preferredColorScheme(.dark).tint(Theme.accent)
+            root.preferredColorScheme(.dark).tint(Theme.accent).environmentObject(router)
+        }
+    }
+
+    @ViewBuilder private var root: some View {
+        if let p = Self.preview, p.hasPrefix("export-") { ExportPreview(kind: p) }
+        else if let p = Self.preview, p.hasPrefix("player-") { PlayerPreview(kind: p) }
+        else if Self.preview == "bench" { NavigationStack { ContentView() } }
+        else if Self.preview == "logs" { NavigationStack { LogsView() } }
+        else {
+            TabView(selection: $router.tab) {
+                PlayerView().tabItem { Label("Player", systemImage: "play.rectangle") }.tag(AppTab.player)
+                PhotoView().tabItem { Label("Photo", systemImage: "face.smiling") }.tag(AppTab.photo)
+                LibraryView(initial: Self.preview == "library-videos" ? .videos : .faces).tabItem { Label("Library", systemImage: "square.stack") }.tag(AppTab.library)
+                SettingsView().tabItem { Label("Settings", systemImage: "gearshape") }.tag(AppTab.settings)
             }
         }
     }
@@ -72,7 +90,6 @@ struct ContentView: View {
     @State private var picking = false
 
     var body: some View {
-        NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
                 Text(vm.installed ? "Models installed" : "No models yet: import models.zip")
                     .font(.subheadline)
@@ -99,8 +116,7 @@ struct ContentView: View {
                 }
             }
             .padding()
-            .navigationTitle("InSwapBench")
-        }
+            .navigationTitle("Models and benchmark")
         .fileImporter(isPresented: $picking, allowedContentTypes: [.zip]) { result in
             if case let .success(url) = result { vm.importPicked(url) }
         }

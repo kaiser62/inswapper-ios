@@ -70,7 +70,6 @@ struct FacesView: View {
     @State private var shareURL: URL?
 
     var body: some View {
-        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     PhotosPicker(selection: $newItems, maxSelectionCount: 8, matching: .images) { Label("New face from photos", systemImage: "person.crop.circle.badge.plus") }
@@ -100,7 +99,6 @@ struct FacesView: View {
                 }.padding()
             }
             .navigationTitle("Faces")
-        }
         .onChange(of: newItems) { _, items in
             guard !items.isEmpty else { return }
             let picked = items; newItems = []
@@ -249,9 +247,18 @@ struct VideoLibrarySheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var link = ""
     let onPick: (VideoLibrary.Entry) -> Void
+    /// Inside the Library tab: no navigation stack or Close button of its own.
+    var embedded = false
 
     var body: some View {
-        NavigationStack {
+        if embedded { content } else {
+            NavigationStack {
+                content.toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+            }
+        }
+    }
+
+    private var content: some View {
             List {
                 Section("Add from a link") {
                     TextField("https://…/video.mp4", text: $link).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
@@ -290,7 +297,5 @@ struct VideoLibrarySheet: View {
                 }
             }
             .navigationTitle("Videos")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
-        }
     }
 }

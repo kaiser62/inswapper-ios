@@ -11,11 +11,11 @@ struct PlayerPreview: View {
         case "player-settings":
             PlayerSettingsSheet(fastSwapper: .constant(true), strength: .constant(100), combo: .constant(false), hasFast: true,
                                 costText: "About 4 min of rendering per minute of video on a cool phone.", cacheText: "840 MB of 2.0 GB",
-                                diagnostics: "build 46 · mode A · video 1280x720\n15.2 swaps/s · thermal nominal", onClearCache: {}, onCopyDiagnostics: {})
+                                diagnostics: "build 46 · mode A · video 1280x720\n15.2 swaps/s · thermal nominal", onClearCache: {}, onCopyDiagnostics: {}).themed()
         case "player-video":
-            VideoSourceSheet(photosItem: .constant(nil), onFiles: {}, onSaved: {})
+            VideoSourceSheet(photosItem: .constant(nil), onFiles: {}, onSaved: {}).themed()
         case "player-face":
-            FaceSourceSheet(photoItem: .constant(nil), canSave: true, onLibrary: {}, onSave: {})
+            FaceSourceSheet(photoItem: .constant(nil), canSave: true, onLibrary: {}, onSave: {}).themed()
         default:
             let loaded = kind == "player-loaded"
             PlayerLayout(state: state(loaded), mode: $mode, actions: PlayerLayoutActions()) {

@@ -242,6 +242,7 @@ struct PlayerView: View {
     private enum Next { case none, files, saved, faces }
     @StateObject private var vm = PlayerVM()
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var router: AppRouter
     @State private var videoItem: PhotosPickerItem?
     @State private var srcItem: PhotosPickerItem?
     @State private var importing = false
@@ -305,6 +306,9 @@ struct PlayerView: View {
             Task { if let d = try? await item.loadTransferable(type: Data.self) { vm.setSource(d) } }
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.movie, .mpeg4Movie]) { result in importFile(result) }
+        .onChange(of: router.pendingVideo) { _, e in
+            if let e { vm.setLibraryVideo(e); router.pendingVideo = nil }   // the Library asked to open a saved video
+        }
         .onChange(of: scenePhase) { _, phase in vm.setActive(phase == .active) }
         .onDisappear { vm.setVisible(false) }   // switching tabs pauses playback and the swap workers
         .onAppear { vm.setVisible(true) }

@@ -47,7 +47,6 @@ struct LogsView: View {
     @State private var copied = false
 
     var body: some View {
-        NavigationStack {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Button(copied ? "Copied" : "Copy all") { UIPasteboard.general.string = log.text; copied = true
@@ -72,6 +71,5 @@ struct LogsView: View {
             }
             .padding()
             .navigationTitle("Logs")
-        }
     }
 }
