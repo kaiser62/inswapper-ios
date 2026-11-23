@@ -28,6 +28,7 @@ Task {
                 let ms = Date().timeIntervalSince(t0) * 1000
                 // identity score: re-detect the composited frame, cosine to the source embedding
                 let out = try Compositor.composite(frame, patches: [p])
+                if let o = ProcessInfo.processInfo.environment["OUT"] { try PixelBuf.writePNG(out, to: URL(fileURLWithPath: "\(o)_\(Int(t)).png")) }
                 var cs = "-"
                 if let f2 = try pipe.detect(out).max(by: { $0.area < $1.area }) {
                     let e = try pipe.embedding(forSource: out, face: f2)
