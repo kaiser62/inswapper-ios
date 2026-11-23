@@ -6,37 +6,49 @@ struct PlayerStage<Video: View>: View {
     let actions: PlayerLayoutActions
     @ViewBuilder let video: () -> Video
 
+    @Binding var theater: Bool
+
     var body: some View {
-        ZStack {
-            Color.black
-            if state.hasVideo {
-                video().aspectRatio(state.aspect, contentMode: .fit)
-            } else {
-                ContentUnavailableView {
-                    Label("No video yet", systemImage: "film")
-                } actions: {
-                    Button("Choose video", action: actions.chooseVideo).buttonStyle(.borderedProminent).tint(Theme.accent)
+        VStack(spacing: 0) {
+            ZStack {
+                Color.black
+                if state.hasVideo {
+                    video().aspectRatio(state.aspect, contentMode: .fit)
+                } else {
+                    ContentUnavailableView {
+                        Label("No video yet", systemImage: "film")
+                    } actions: {
+                        Button("Choose video", action: actions.chooseVideo).buttonStyle(.borderedProminent).tint(Theme.accent)
+                    }
                 }
-            }
-            if state.hasVideo {
-                VStack {
-                    HStack {
-                        if !state.badge.isEmpty {
-                            Text(state.badge).font(.footnote.bold()).padding(.horizontal, 10).padding(.vertical, 4)
-                                .background(.black.opacity(0.55), in: Capsule())
+                if state.hasVideo {
+                    VStack {
+                        HStack {
+                            if !state.badge.isEmpty && !theater {
+                                Text(state.badge).font(.footnote.bold()).padding(.horizontal, 10).padding(.vertical, 4)
+                                    .background(.black.opacity(0.55), in: Capsule())
+                            }
+                            Spacer()
+                            Button(theater ? "Exit theater" : "Theater", systemImage: theater ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
+                                withAnimation(Theme.spring) { theater.toggle() }
+                            }
+                            .labelStyle(.iconOnly).font(.footnote.bold())
+                            .frame(minWidth: Theme.hit, minHeight: Theme.hit)
+                            .background(.black.opacity(0.55), in: Circle())
                         }
                         Spacer()
                     }
-                    Spacer()
-                    transport
+                    .padding(Theme.gap / 2)
                 }
-                .padding(Theme.gap)
             }
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .containerRelativeFrame(.vertical) { h, _ in theater ? h * 0.8 : h * 0.34 }
+            if state.hasVideo { transport }
         }
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .containerRelativeFrame(.vertical) { h, _ in h * 0.44 }
-        .clipShape(.rect(cornerRadius: Theme.radius))
-        .padding(.horizontal, Theme.pad)
+        .background(Theme.surface)
+        .clipShape(.rect(cornerRadius: theater ? 0 : Theme.radius))
+        .overlay { if !theater { RoundedRectangle(cornerRadius: Theme.radius).strokeBorder(Theme.line) } }
+        .padding(.horizontal, theater ? 0 : Theme.pad)
     }
 
     private var transport: some View {
@@ -59,7 +71,8 @@ struct PlayerStage<Video: View>: View {
             }
         }
         .padding(.horizontal, Theme.gap)
-        .background(LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom).padding(.top, -Theme.pad * 2))
+        .padding(.vertical, 4)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .foregroundStyle(.white)
     }
 

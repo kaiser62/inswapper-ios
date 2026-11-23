@@ -47,7 +47,7 @@ jobs:
           xcrun simctl install "$U" "$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/InSwapBench.app"
           xcrun simctl status_bar "$U" override --time 9:41 --batteryState charged --batteryLevel 100 || true
           shoot () {  # $1 file tag
-            for s in player photo library library-videos settings bench logs player-loaded player-empty player-settings player-video player-face export-sheet export-running export-paused export-done export-failed; do
+            for s in player photo library library-videos settings bench logs player-loaded player-empty player-settings player-video player-face player-theater export-sheet export-running export-paused export-done export-failed; do
               xcrun simctl launch --terminate-running-process "$U" dev.kaiser62.inswapbench -uiPreview $s >/dev/null
               sleep 3
               xcrun simctl io "$U" screenshot "shots/${s}_$1.png"

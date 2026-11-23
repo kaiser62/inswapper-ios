@@ -31,13 +31,15 @@ struct PlayerLayout<Video: View>: View {
     let state: PlayerLayoutState
     @Binding var mode: PlayMode
     let actions: PlayerLayoutActions
+    var startInTheater = false
     @ViewBuilder let video: () -> Video
+    @State private var theater = false
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(spacing: Theme.gap) {
-            PlayerStage(state: state, actions: actions, video: video)
-            ScrollView {
+            PlayerStage(state: state, actions: actions, video: video, theater: $theater)
+            if !theater { ScrollView {
                 VStack(alignment: .leading, spacing: Theme.gap) {
                     let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: Theme.gap)) : AnyLayout(HStackLayout(spacing: Theme.gap))
                     layout {
@@ -57,10 +59,13 @@ struct PlayerLayout<Video: View>: View {
                     if typeSize.isAccessibilitySize { exportBar.padding(.horizontal, -Theme.pad) }
                 }
                 .padding(.horizontal, Theme.pad)
-            }
-            if !typeSize.isAccessibilitySize { exportBar }
+            } }
+            if !theater && !typeSize.isAccessibilitySize { exportBar }
         }
         .background(Theme.background)
+        .toolbar(theater ? .hidden : .automatic, for: .tabBar)
+        .statusBarHidden(theater)
+        .onAppear { if startInTheater { theater = true } }
         .onChange(of: state.status) { _, new in
             if !new.isEmpty { AccessibilityNotification.Announcement(new).post() }   // loading steps and errors are otherwise silent
         }

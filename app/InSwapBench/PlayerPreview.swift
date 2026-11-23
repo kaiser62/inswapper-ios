@@ -17,8 +17,8 @@ struct PlayerPreview: View {
         case "player-face":
             FaceSourceSheet(photoItem: .constant(nil), canSave: true, onLibrary: {}, onSave: {}).themed()
         default:
-            let loaded = kind == "player-loaded"
-            PlayerLayout(state: state(loaded), mode: $mode, actions: PlayerLayoutActions()) {
+            let loaded = kind == "player-loaded" || kind == "player-theater"
+            PlayerLayout(state: state(loaded), mode: $mode, actions: PlayerLayoutActions(), startInTheater: kind == "player-theater") {
                 LinearGradient(colors: [Color(red: 0.2, green: 0.25, blue: 0.5), Color(red: 0.55, green: 0.3, blue: 0.5)], startPoint: .topLeading, endPoint: .bottomTrailing)
                     .overlay { Image(systemName: "person.crop.rectangle").font(.system(size: 64)).foregroundStyle(.white.opacity(0.35)) }
             }
