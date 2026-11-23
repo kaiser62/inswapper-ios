@@ -5,10 +5,11 @@ struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
-            .foregroundStyle(.black)
+            .foregroundStyle(Theme.background)
             .frame(maxWidth: .infinity, minHeight: Theme.hit)
             .padding(.vertical, 4)
-            .background(Theme.accent, in: .rect(cornerRadius: Theme.radius))
+            .background(Theme.accent, in: .rect(cornerRadius: Theme.radiusSmall))
+            .shadow(color: Theme.accent.opacity(0.25), radius: 8, y: 2)
             .opacity(configuration.isPressed ? 0.8 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(Theme.spring, value: configuration.isPressed)
@@ -23,6 +24,7 @@ struct SoftButtonStyle: ButtonStyle {
             .frame(minHeight: Theme.hit)
             .padding(.horizontal, Theme.gap)
             .background(Theme.surface, in: .rect(cornerRadius: Theme.radiusSmall))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall).strokeBorder(Theme.line))
             .opacity(configuration.isPressed ? 0.7 : 1)
             .animation(Theme.spring, value: configuration.isPressed)
     }
