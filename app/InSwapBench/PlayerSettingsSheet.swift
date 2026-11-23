@@ -16,7 +16,7 @@ struct PlayerSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Quality") {
+                Section {
                     if hasFast {
                         Toggle("Fast 8-bit swapper", isOn: $fastSwapper)
                     }
@@ -25,6 +25,8 @@ struct PlayerSettingsSheet: View {
                     }
                     .pickerStyle(.segmented)
                     Toggle("Live preview where not rendered yet", isOn: $combo)
+                } header: {
+                    Text("Quality")
                 } footer: {
                     Text("The 8-bit swapper is about 2.4x faster. Strength above 100 adds swap passes in Render ahead: slower, with a stronger likeness. \(costText)")
                 }
