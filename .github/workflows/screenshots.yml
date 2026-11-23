@@ -57,8 +57,16 @@ jobs:
           xcrun simctl ui "$U" appearance dark;                                                                shoot dark
           xcrun simctl ui "$U" appearance light;  xcrun simctl ui "$U" content_size accessibility-extra-large; shoot xxl
           ls -l shots
+          mkdir -p small
+          for f in shots/*.png; do sips -Z 640 -s format jpeg -s formatOptions 70 "$f" --out "small/$(basename "${f%.png}").jpg" >/dev/null; done
+          du -sh small
       - uses: actions/upload-artifact@v4
         with:
           name: ui-screenshots
           path: shots
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots-small
+          path: small
           retention-days: 3
