@@ -43,7 +43,7 @@ final class PlayerVM: ObservableObject {
         didSet { UserDefaults.standard.set(strength, forKey: "strength"); if strength != oldValue, engine != nil { prepare() } }
     }
     /// 8-bit palettized swapper (63 ms vs 149 ms on the phone). Off until compared by eye; needs swapper_pal8 imported.
-    @Published var fastSwapper: Bool = UserDefaults.standard.bool(forKey: "fastSwapper") && ModelStore.hasPal8 {
+    @Published var fastSwapper: Bool = (UserDefaults.standard.object(forKey: "fastSwapper") as? Bool ?? true) && ModelStore.hasPal8 {   // default ON once installed (build 40 verified clean by the user)
         didSet { UserDefaults.standard.set(fastSwapper, forKey: "fastSwapper"); if fastSwapper != oldValue, engine != nil { prepare() } }
     }
     var costText: String {
@@ -124,7 +124,7 @@ final class PlayerVM: ObservableObject {
                 let pipe = try await SharedPipeline.get(fast: fastSwapper)
                 status = "Opening video…"
                 let reader = try await VideoReader(url: url)
-                let identity = "\(Self.videoID(url))|\(FaceLibrary.fingerprint(latent))|\(reader.width)x\(reader.height)" + (strength == 100 ? "" : "|s\(strength)") + (fastSwapper && ModelStore.hasPal8 ? "|q8" : "")
+                let identity = "\(Self.videoID(url))|\(FaceLibrary.fingerprint(latent))|\(reader.width)x\(reader.height)|t2" + (strength == 100 ? "" : "|s\(strength)") + (fastSwapper && ModelStore.hasPal8 ? "|q8" : "")
                 let dir = AppData.patchCacheRoot.appendingPathComponent(Self.hash(Data(identity.utf8)))
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 CacheManager.touch(dir)
@@ -240,7 +240,7 @@ struct PlayerView: View {
                         Text("A  Render ahead").tag(PlayMode.renderAhead)
                         Text("B  Live preview").tag(PlayMode.livePreview)
                     }.pickerStyle(.segmented)
-                    if ModelStore.hasPal8 { Toggle("Fast 8-bit swapper (2.4x faster; compare by eye)", isOn: $vm.fastSwapper).font(.footnote) }
+                    if ModelStore.hasPal8 { Toggle("Fast 8-bit swapper (on by default, 2.4x faster)", isOn: $vm.fastSwapper).font(.footnote) }
                     if vm.mode == .renderAhead {
                         Picker("Strength", selection: $vm.strength) {
                             Text("100").tag(100); Text("150").tag(150); Text("200").tag(200); Text("300").tag(300)

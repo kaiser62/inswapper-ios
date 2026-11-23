@@ -94,6 +94,27 @@ Task {
             check(seen.count == pick.count, "PSNR compared \(seen.count)/\(pick.count) frames")
         }
         try? FileManager.default.removeItem(at: cache)
+        // memory cap + resume: cancel at ~30 frames with a small RAM cap, then resume from the same cache directory
+        do {
+            let cache2 = FileManager.default.temporaryDirectory.appendingPathComponent("exp-\(UUID().uuidString)")
+            let s1 = PatchStore(frameDurationUs: reader.frameDurationUs); s1.attach(directory: cache2, identity: "resume")
+            let e1 = ExportEngine(pipeline: pipe, reader: reader, store: s1, latent: lat, strength: strength); e1.residentCapBytes = 2_000_000
+            let tok = CancelToken(); var maxBytes = 0
+            let o1 = FileManager.default.temporaryDirectory.appendingPathComponent("res1-\(UUID().uuidString).mp4")
+            do { try e1.run(to: o1, until: until, cancel: tok, progress: { p in maxBytes = max(maxBytes, s1.bytes); if p.phase == .rendering && p.done >= 30 { tok.cancel() } }); check(false, "cancel mid-render should throw") }
+            catch ExportEngine.ExportError.cancelled { check(!FileManager.default.fileExists(atPath: o1.path), "mid-render cancel leaves no output file") }
+            check(maxBytes <= 2_000_000 + 200_000, "resident patch bytes stayed near the 2 MB cap (peak \(maxBytes))")
+            let s2 = PatchStore(frameDurationUs: reader.frameDurationUs); let have = s2.attach(directory: cache2, identity: "resume")
+            check(have >= 20 && have < plan.frames, "resume store reloaded \(have) rendered frames from disk")
+            let e2 = ExportEngine(pipeline: pipe, reader: reader, store: s2, latent: lat, strength: strength); e2.residentCapBytes = 2_000_000
+            var firstDone = -1
+            let o2 = FileManager.default.temporaryDirectory.appendingPathComponent("res2-\(UUID().uuidString).mp4")
+            try e2.run(to: o2, until: until, cancel: CancelToken(), progress: { p in if firstDone < 0 && p.phase == .rendering { firstDone = p.done } })
+            check(firstDone >= 20, "resume starts rendering at \(firstDone) done frames, not 0")
+            let ro = try await rawPts(AVURLAsset(url: o2), until: endUs)
+            check(ro.count == srcPts.count, "resumed export has all \(ro.count) frames")
+            try? FileManager.default.removeItem(at: cache2); try? FileManager.default.removeItem(at: o2)
+        }
         // cancel test: a cancelled export leaves no partial file
         let tok = CancelToken(); tok.cancel()
         let o2 = FileManager.default.temporaryDirectory.appendingPathComponent("cancel-\(UUID().uuidString).mp4")

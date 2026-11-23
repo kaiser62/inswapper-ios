@@ -3,7 +3,7 @@ import CoreGraphics
 import ImageIO
 import Foundation
 
-enum ImagingError: Error { case decode, alloc }
+enum ImagingError: Error { case decode, alloc, gpu(String) }
 
 /// BGRA `CVPixelBuffer` helpers. All pipeline stages are frame-in / frame-out on these buffers.
 enum PixelBuf {

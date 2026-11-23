@@ -37,6 +37,9 @@ final class VideoReader {
         composition = AVMutableVideoComposition()
         composition.renderSize = CGSize(width: width, height: height)
         composition.frameDuration = frameDuration
+        // Deliver the source's own frame timing. Without this the composition re-grids frames and labelled every frame after the first one frame
+        // late (+41.7 ms at 23.976 fps: measured with tools/ptsdbg, reader frame "83416" was raw frame 41708) and dropped frames of VFR clips.
+        composition.sourceTrackIDForFrameTiming = t.trackID
         composition.instructions = [inst]
         // HDR (HLG / PQ) phone clips: ask for SDR Rec.709 so AVFoundation tone-maps. SDR clips keep an untouched composition
         // (setting the colour properties on those is unnecessary and was the prime suspect for a black player on device).

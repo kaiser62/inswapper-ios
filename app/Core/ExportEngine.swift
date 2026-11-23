@@ -31,6 +31,8 @@ final class ExportEngine {
     }
 
     let pipeline: FacePipeline, reader: VideoReader, store: PatchStore, latent: [Float], strength: Int
+    /// RAM cap for resident patches while exporting (evicted chunks stay on disk).
+    var residentCapBytes = 60_000_000
     private let presenter: MetalCompositor?
 
     init(pipeline: FacePipeline, reader: VideoReader, store: PatchStore, latent: [Float], strength: Int = 100) {
@@ -57,6 +59,7 @@ final class ExportEngine {
     /// Throws `.cancelled` after cancel; the partial file is deleted and the patch cache is kept (render progress survives).
     func run(to output: URL, until: Double? = nil, cancel: CancelToken, gate: (() -> Void)? = nil, progress: @escaping (Progress) -> Void) throws {
         let fm = FileManager.default
+        pipeline.cpuDetector = false   // one worker: detect on the ANE
         let p = plan(until: until)
         let free = VideoDownloader.freeBytes(at: output.deletingLastPathComponent())
         if free < p.diskNeeded { throw ExportError.noSpace(need: p.diskNeeded, free: free) }
@@ -66,9 +69,9 @@ final class ExportEngine {
         var sinceFlush = 0
         progress(Progress(phase: .rendering, done: min(total, store.count), total: total))
         let worker = RenderWorker(pipeline: pipeline, reader: reader, store: store, latent: latent, strength: strength)
-        try worker.run(from: 0, until: until, cancel: cancel, gate: gate, onFrame: { [store] _ in
+        try worker.run(from: 0, until: until, cancel: cancel, gate: gate, onFrame: { [store, cap = residentCapBytes] _ in
             sinceFlush += 1
-            if sinceFlush >= Int(PatchStore.chunkFrames) { sinceFlush = 0; store.flush() }
+            if sinceFlush >= Int(PatchStore.chunkFrames) { sinceFlush = 0; store.flush(); _ = store.evict(maxBytes: cap, keepNear: 0) }
             progress(Progress(phase: .rendering, done: min(total, store.count), total: total))
         })
         store.flush()
@@ -145,14 +148,20 @@ final class ExportEngine {
                 if cancel.isCancelled { return false }
                 if let e = endUs, pts >= e { return false }
                 // completeness: a frame missing from the store is rendered now, never written raw
-                var patches = store.get(displayedAt: pts)
+                var patches = store.get(pts: pts)   // exact key: a neighbour's hold must never stand in for a missing frame
                 if patches == nil {
                     let face = try pipeline.detect(frame).max { $0.area < $1.area }
                     let made = try face.map { [try pipeline.swap(frame: frame, face: $0, latent: latent, strength: strength)] } ?? []
                     store.put(pts: pts, made); patches = made
                 }
                 guard let comp = presenter else { throw ExportError.compositor }
-                let outBuf = try comp.composite(frame, patches: patches ?? [])
+                // a GPU submit can fail while the app is inactive: wait (gate) and retry the same frame instead of writing a bad one
+                var outBuf: CVPixelBuffer?
+                for attempt in 0..<4 {
+                    do { outBuf = try comp.composite(frame, patches: patches ?? []); break }
+                    catch { if attempt == 3 { throw error }; Thread.sleep(forTimeInterval: 0.5); gate?() }
+                }
+                guard let outBuf else { throw ExportError.compositor }
                 while !vIn.isReadyForMoreMediaData {
                     if cancel.isCancelled || writer.status == .failed { return false }
                     Thread.sleep(forTimeInterval: 0.005)
@@ -162,6 +171,7 @@ final class ExportEngine {
                 }
                 n += 1
                 if n % 8 == 0 { progress(Progress(phase: .encoding, done: n, total: total)) }
+                if n % Int(PatchStore.chunkFrames) == 0 { _ = store.evict(maxBytes: residentCapBytes, keepNear: pts) }
                 return true
             }
         } catch { failure = error }

@@ -133,6 +133,7 @@ final class MetalCompositor {
         encode(src: s, dst: d, patches: patches, commandBuffer: cb)
         cb.commit(); cb.waitUntilCompleted()
         _ = (sk, dk)
+        guard cb.status == .completed else { throw ImagingError.gpu(cb.error?.localizedDescription ?? "status \(cb.status.rawValue)") }
         return out
     }
 }
