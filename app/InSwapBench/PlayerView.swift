@@ -232,7 +232,7 @@ struct PlayerView: View {
     }
 }
 
-enum DisplayStats { nonisolated(unsafe) static var noDrawable = 0, presentFail = 0 }
+enum DisplayStats { nonisolated(unsafe) static var noDrawable = 0, presentFail = 0, firstDrawable = true }
 
 struct MetalVideoView: UIViewRepresentable {
     let engine: PlayerEngine
@@ -269,7 +269,17 @@ struct MetalVideoView: UIViewRepresentable {
         func stop() { link?.invalidate(); link = nil }
         @objc func tick() {
             guard let view, let (frame, t) = engine.nextFrame(hostTime: CACurrentMediaTime()) else { return }
-            guard let drawable = (view.layer as? CAMetalLayer)?.nextDrawable() else { DisplayStats.noDrawable += 1; return }
+            let layer = view.layer as? CAMetalLayer
+            let want = CGSize(width: frame.width, height: frame.height)
+            if let layer, layer.drawableSize != want { layer.drawableSize = want }   // layout can reset it to 0 (no drawable then)
+            guard let drawable = layer?.nextDrawable() else {
+                DisplayStats.noDrawable += 1
+                if DisplayStats.noDrawable == 1 || DisplayStats.noDrawable % 200 == 0 {
+                    AppLog.log("nextDrawable nil: layer \(layer == nil ? "NOT CAMetalLayer (\(type(of: view.layer)))" : "ok") drawableSize \(layer?.drawableSize ?? .zero) want \(want) bounds \(view.bounds.size) device \(layer?.device == nil ? "nil" : "set") fmt \(layer?.pixelFormat.rawValue ?? 0) window \(view.window == nil ? "nil" : "set") hidden \(view.isHidden)", "display")
+                }
+                return
+            }
+            if DisplayStats.firstDrawable { DisplayStats.firstDrawable = false; AppLog.log("first drawable \(drawable.texture.width)x\(drawable.texture.height)", "display") }
             if !presenter.present(frame: frame, patches: engine.patches(at: t), to: drawable.texture, drawable: drawable) { DisplayStats.presentFail += 1 }
         }
     }
