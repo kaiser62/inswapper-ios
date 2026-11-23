@@ -51,7 +51,7 @@ final class PlayerVM: ObservableObject {
         let passes = (strength + 99) / 100
         let fps = 1 / max(0.001, e.reader.frameDuration.seconds)
         let minPerMin = fps / ((fastSwapper ? 15.0 : 6.5) / Double(passes))    // swaps/s on a cool phone (about 2.5 when hot)
-        return String(format: "≈ %.1f min of rendering per minute of video on a cool phone (same speed when hot)", minPerMin)
+        return String(format: "≈ %.1f min of rendering per minute of video on a cool phone", minPerMin)
     }
     @Published var time = 0.0
     @Published var duration = 0.0
@@ -133,8 +133,8 @@ final class PlayerVM: ObservableObject {
                 e.mode = mode; e.combo = combo
                 duration = reader.duration; engine = e
                 e.start()
-                AppLog.log("engine ready: \(reader.width)x\(reader.height) \(reader.duration) s hdr \(reader.isHDR) mode \(mode.rawValue) combo \(combo)", "player")
-                status = "Ready. \(Int(reader.duration)) s, \(reader.width)×\(reader.height). Mode \(mode.rawValue)."
+                AppLog.log("engine ready: \(reader.width)x\(reader.height) \(reader.duration) s hdr \(reader.isHDR) mode \(mode.rawValue) combo \(combo) swapper \(fastSwapper && ModelStore.hasPal8 ? "8-bit" : "FP16") strength \(strength)", "player")
+                status = "Ready. \(Int(reader.duration)) s, \(reader.width)×\(reader.height). Mode \(mode.rawValue), \(fastSwapper && ModelStore.hasPal8 ? "8-bit" : "FP16") swapper."
                 startTimer()
             } catch PipelineError.noFace {
                 status = "No face found in the source photo."
@@ -240,8 +240,8 @@ struct PlayerView: View {
                         Text("A  Render ahead").tag(PlayMode.renderAhead)
                         Text("B  Live preview").tag(PlayMode.livePreview)
                     }.pickerStyle(.segmented)
+                    if ModelStore.hasPal8 { Toggle("Fast 8-bit swapper (2.4x faster; compare by eye)", isOn: $vm.fastSwapper).font(.footnote) }
                     if vm.mode == .renderAhead {
-                        if ModelStore.hasPal8 { Toggle("Fast 8-bit swapper (2.4x faster; compare by eye)", isOn: $vm.fastSwapper).font(.footnote) }
                         Picker("Strength", selection: $vm.strength) {
                             Text("100").tag(100); Text("150").tag(150); Text("200").tag(200); Text("300").tag(300)
                         }.pickerStyle(.segmented)

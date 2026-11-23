@@ -19,6 +19,14 @@ Task {
             crop = try PixelBuf.warp(frame, M: FaceAlign.estimate(landmarks: f.landmarks, size: 128), size: 128)
             return false
         }
+        if ProcessInfo.processInfo.environment["SYNTH"] != nil {   // the Bench tab's synthetic input
+            let pb = try PixelBuf.make(width: 128, height: 128)
+            CVPixelBufferLockBaseAddress(pb, [])
+            let base = CVPixelBufferGetBaseAddress(pb)!.assumingMemoryBound(to: UInt8.self)
+            for i in 0..<(CVPixelBufferGetBytesPerRow(pb) * 128) { base[i] = UInt8(truncatingIfNeeded: i &* 31 &+ (i >> 8)) }
+            CVPixelBufferUnlockBaseAddress(pb, [])
+            crop = pb; lat = (0..<512).map { ($0 % 2 == 0 ? 1 : -1) / Float(512).squareRoot() }
+        }
         let cfg = MLModelConfiguration(); cfg.computeUnits = cu
         let url: URL = variant == "baseline" ? root.appendingPathComponent("compiled/swapper.mlmodelc") : try await MLModel.compileModel(at: URL(fileURLWithPath: variant))
         let t0 = Date(); let m = try MLModel(contentsOf: url, configuration: cfg); let loadMs = Date().timeIntervalSince(t0) * 1000
