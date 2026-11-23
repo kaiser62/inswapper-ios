@@ -8,7 +8,7 @@ import QuartzCore
 final class MetalPresenter {
     let compositor: MetalCompositor
     private let inflight = DispatchSemaphore(value: 3)
-    private(set) var presented = 0, skipped = 0
+    private(set) var presented = 0, skipped = 0, gpuErrors = 0, lastGPUError = "none", lastDstSize = "-"
     private let lock = NSLock()
 
     init?() { guard let c = MetalCompositor() else { return nil }; compositor = c }
@@ -22,7 +22,12 @@ final class MetalPresenter {
         guard let (src, keep) = compositor.texture(frame), let cb = compositor.queue.makeCommandBuffer() else { inflight.signal(); return false }
         compositor.encode(src: src, dst: dst, patches: patches, commandBuffer: cb)
         if let d = drawable { cb.present(d) }
-        cb.addCompletedHandler { [inflight] _ in _ = keep; inflight.signal(); completion?() }
+        lock.lock(); lastDstSize = "\(dst.width)x\(dst.height)"; lock.unlock()
+        cb.addCompletedHandler { [inflight, weak self] b in
+            _ = keep
+            if b.status != .completed, let self { self.lock.lock(); self.gpuErrors += 1; self.lastGPUError = "status \(b.status.rawValue) \(b.error?.localizedDescription ?? "")"; self.lock.unlock() }
+            inflight.signal(); completion?()
+        }
         cb.commit()
         lock.lock(); presented += 1; lock.unlock()
         return true

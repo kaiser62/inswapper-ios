@@ -28,7 +28,7 @@ final class PlayerEngine {
     private(set) var lastError: String?
     private var retries = 0, lastTick = Date.distantPast
     /// Display diagnostics (read by the UI): ticks asked for a frame, frames that were new, ticks with no frame at all.
-    private(set) var dispTicks = 0, dispNew = 0, dispNone = 0
+    private(set) var dispTicks = 0, dispNew = 0, dispNone = 0, frameSample = "-", frameSize = "-"
     var itemInfo: String {
         guard let it = player.currentItem else { return "no item" }
         let st = ["unknown", "ready", "FAILED"][min(2, it.status.rawValue)]
@@ -92,7 +92,7 @@ final class PlayerEngine {
 
     private func applyMode() {
         let m = mode, c = combo
-        pipeline.cpuDetector = c   // two workers swapping at once: detect on CPU so the ANE stays with the swapper
+        pipeline.cpuDetector = (m == .renderAhead && c)   // two workers swapping at once: detect on CPU so the ANE stays with the swapper
         if m == .renderAhead { restartRender(from: currentTime) } else { renderToken.cancel() }
         if m == .livePreview || c { startLive() } else { liveToken.cancel(); liveStore.removeAll() }
     }
@@ -162,6 +162,17 @@ final class PlayerEngine {
         lock.lock(); dispTicks += 1; lock.unlock()
         if it.isValid, output.hasNewPixelBuffer(forItemTime: it), let pb = output.copyPixelBuffer(forItemTime: it, itemTimeForDisplay: nil) {
             lock.lock(); dispNew += 1; lock.unlock()
+            if dispNew == 1 || dispNew % 30 == 0 {   // mean of a 5x5 patch at the centre: black frames vs good frames on a black screen
+                CVPixelBufferLockBaseAddress(pb, .readOnly)
+                if let base = CVPixelBufferGetBaseAddress(pb) {
+                    let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb), bpr = CVPixelBufferGetBytesPerRow(pb)
+                    var sum = [0, 0, 0]
+                    for y in (h / 2 - 2)...(h / 2 + 2) { for x in (w / 2 - 2)...(w / 2 + 2) { let q = base.advanced(by: y * bpr + x * 4).assumingMemoryBound(to: UInt8.self); for c in 0..<3 { sum[c] += Int(q[c]) } } }
+                    let sm = "BGR \(sum[0] / 25),\(sum[1] / 25),\(sum[2] / 25)"
+                    lock.lock(); frameSample = sm; frameSize = "\(w)x\(h) fmt \(CVPixelBufferGetPixelFormatType(pb))"; lock.unlock()
+                }
+                CVPixelBufferUnlockBaseAddress(pb, .readOnly)
+            }
             lastFrame = (pb, it.seconds)
         } else if lastFrame == nil, let pb = output.copyPixelBuffer(forItemTime: player.currentTime(), itemTimeForDisplay: nil) {
             lastFrame = (pb, player.currentTime().seconds)
