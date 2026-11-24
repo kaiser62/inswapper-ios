@@ -38,7 +38,7 @@ struct PlayerStage<Video: View>: View {
                         }
                         Spacer()
                     }
-                    .padding(Theme.gap / 2)
+                    .padding(Theme.gap)
                 }
             }
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)

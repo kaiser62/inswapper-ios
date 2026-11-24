@@ -73,21 +73,25 @@ struct FacesView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     PhotosPicker(selection: $newItems, maxSelectionCount: 8, matching: .images) { Label("New face from photos", systemImage: "person.crop.circle.badge.plus") }
-                        .buttonStyle(.borderedProminent).disabled(busy)
+                        .buttonStyle(PrimaryButtonStyle()).disabled(busy)
                     Text(note).font(.footnote).foregroundStyle(.secondary)
                     HStack {
-                        Button { exportBackup() } label: { Label("Back up", systemImage: "square.and.arrow.up") }.buttonStyle(.bordered).disabled(store.entries.isEmpty)
-                        Button { importing = true } label: { Label("Restore", systemImage: "square.and.arrow.down") }.buttonStyle(.bordered)
+                        Button { exportBackup() } label: { Label("Back up", systemImage: "square.and.arrow.up") }.buttonStyle(SoftButtonStyle()).disabled(store.entries.isEmpty)
+                        Button { importing = true } label: { Label("Restore", systemImage: "square.and.arrow.down") }.buttonStyle(SoftButtonStyle())
                     }.font(.footnote)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 12)], spacing: 12) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 12) {
                         ForEach(store.entries, id: \.id) { e in
-                            VStack {
+                            VStack(spacing: 4) {
                                 Group {
-                                    if let img = store.thumbnail(e.id) { Image(uiImage: img).resizable().scaledToFill() } else { Color.gray.opacity(0.3) }
-                                }.frame(width: 90, height: 90).clipShape(Circle())
-                                Text(e.name).font(.footnote).lineLimit(1)
-                                Text("\(e.photoCount) photo\(e.photoCount == 1 ? "" : "s")").font(.caption2).foregroundStyle(.secondary)
+                                    if let img = store.thumbnail(e.id) { Image(uiImage: img).resizable().scaledToFill() } else { Theme.surfaceRaised }
+                                }
+                                .aspectRatio(1, contentMode: .fit)
+                                .clipShape(.rect(cornerRadius: Theme.radiusSmall))
+                                .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall).strokeBorder(Theme.line))
+                                Text(e.name).font(.footnote.weight(.semibold)).lineLimit(1)
+                                Text("\(e.photoCount) photo\(e.photoCount == 1 ? "" : "s")").font(.caption2).foregroundStyle(Theme.muted)
                             }
+                            .accessibilityElement(children: .combine)
                             .contextMenu {
                                 Button("Add photos") { addTarget = e; showAddPicker = true }
                                 Button("Rename") { newName = e.name; renaming = e }

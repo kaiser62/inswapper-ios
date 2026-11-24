@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Faces and saved videos in one place.
 struct LibraryView: View {
-    enum Section: String, CaseIterable, Identifiable { case faces = "Faces", videos = "Videos"; var id: String { rawValue } }
+    enum Section: String, CaseIterable, Identifiable { case faces = "Faces", videos = "Videos", exports = "Exports"; var id: String { rawValue } }
     @EnvironmentObject private var router: AppRouter
     @State private var section: Section
 
@@ -11,14 +11,12 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("Library", selection: $section) {
-                    ForEach(Section.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, Theme.pad).padding(.bottom, Theme.gap)
+                Segmented(options: Section.allCases.map { ($0.rawValue, $0) }, selection: $section)
+                    .padding(.horizontal, Theme.pad).padding(.bottom, Theme.gap)
                 switch section {
                 case .faces: FacesView()
                 case .videos: VideoLibrarySheet(onPick: open, embedded: true).scrollContentBackground(.hidden)
+                case .exports: TakesView()
                 }
             }
             .background(Theme.background)
