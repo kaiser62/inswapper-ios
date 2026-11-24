@@ -50,7 +50,7 @@ final class PlayerVM: ObservableObject {
         guard let e = engine else { return "" }
         let passes = (strength + 99) / 100
         let fps = 1 / max(0.001, e.reader.frameDuration.seconds)
-        let minPerMin = fps / ((fastSwapper ? 15.0 : 6.5) / Double(passes))    // swaps/s on a cool phone (about 2.5 when hot)
+        let minPerMin = fps / swapsPerSecond    // swaps/s on a cool phone (about 2.5 when hot)
         return String(format: "≈ %.1f min of rendering per minute of video on a cool phone", minPerMin)
     }
     @Published var time = 0.0
@@ -139,7 +139,7 @@ final class PlayerVM: ObservableObject {
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 CacheManager.touch(dir)
                 CacheManager.enforce(root: AppData.patchCacheRoot, capBytes: AppData.cacheCapBytes, keep: dir)
-                currentIdentity = identity
+                currentIdentity = identity; loadedPal8 = fastSwapper && ModelStore.hasPal8
                 let e = PlayerEngine(pipeline: pipe, reader: reader, latent: latent, strength: strength, cacheDirectory: dir, identity: identity)
                 e.mode = mode; e.combo = combo
                 duration = reader.duration; e.overlayOn = overlay; e.setSpeed(speed); engine = e
@@ -218,7 +218,11 @@ final class PlayerVM: ObservableObject {
     func endExport() { showExportProgress = false; export.reset(); prepare() }
 
     func setActive(_ a: Bool) { active = a; export.setActive(a); applyWork() }
-    func setVisible(_ v: Bool) { visible = v; applyWork() }
+    private var loadedPal8: Bool?   // which swapper the current engine was built with
+    func setVisible(_ v: Bool) {
+        visible = v; applyWork()
+        if v, engine != nil, !busy, loadedPal8 != (fastSwapper && ModelStore.hasPal8) { prepare() }   // pal8 imported since the engine was built
+    }
     private func applyWork() {
         let on = active && visible
         AppLog.log("work \(on ? "on" : "paused") (active \(active), visible \(visible))", "player")
