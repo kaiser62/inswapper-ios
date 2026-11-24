@@ -164,16 +164,17 @@ struct FacePickerSheet: View {
     var body: some View {
         NavigationStack {
             Group {
-                if store.entries.isEmpty { Text("No saved faces yet. Add some in the Faces tab.").foregroundStyle(.secondary).padding() }
+                if store.entries.isEmpty { Text("No saved faces yet. Add some in the Faces tab.").foregroundStyle(.secondary).multilineTextAlignment(.center).padding() }
                 else {
                     ScrollView {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 12) {
                             ForEach(store.entries, id: \.id) { e in
                                 Button { onPick(e); dismiss() } label: {
                                     VStack {
-                                        Group { if let img = store.thumbnail(e.id) { Image(uiImage: img).resizable().scaledToFill() } else { Color.gray.opacity(0.3) } }
+                                        Group { if let img = store.thumbnail(e.id) { Image(uiImage: img).resizable().scaledToFill() } else { Theme.surface } }
                                             .frame(width: 90, height: 90).clipShape(Circle())
-                                        Text(e.name).font(.footnote).lineLimit(1)
+                                            .overlay(Circle().strokeBorder(Theme.accent.opacity(0.35), lineWidth: 1))
+                                        Text(e.name).font(.footnote).foregroundStyle(.primary).lineLimit(1)
                                     }
                                 }.buttonStyle(.plain)
                             }
@@ -181,9 +182,13 @@ struct FacePickerSheet: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Theme.background)
             .navigationTitle("Saved faces")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
         }
+        .presentationBackground(Theme.background)
     }
 }
 

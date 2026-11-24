@@ -33,6 +33,7 @@ struct InSwapBenchApp: App {
         else if let p = Self.preview, p.hasPrefix("player-") { PlayerPreview(kind: p) }
         else if Self.preview == "bench" { NavigationStack { ContentView() } }
         else if Self.preview == "logs" { NavigationStack { LogsView() } }
+        else if Self.preview == "face-picker" { FacePickerSheet { _ in } }
         else {
             TabView(selection: $router.tab) {
                 PlayerView().tabItem { Label("Player", systemImage: "play.rectangle") }.tag(AppTab.player)

@@ -8,7 +8,7 @@
 # Output: build/sim-shots/<screen>_<large|xxl>.png (build/ is gitignored). Placeholder content only; no models, faces or videos.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SCREENS="player photo library library-videos settings bench logs player-loaded player-empty player-settings player-video player-face player-theater player-ready library-exports export-sheet export-running export-paused export-done export-failed"
+SCREENS="player photo library library-videos settings bench logs player-loaded player-empty player-settings player-video player-face player-theater player-ready library-exports export-sheet export-running export-paused export-done export-failed face-picker"
 SIZE=large; TAG=large; BUILD=1; DEVICE="${SIM_DEVICE:-iPhone 18 Pro}"
 while getopts "xnld:" o; do
   case $o in
