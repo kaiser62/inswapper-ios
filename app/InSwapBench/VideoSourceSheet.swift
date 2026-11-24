@@ -11,17 +11,22 @@ struct VideoSourceSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
                 PhotosPicker(selection: $photosItem, matching: .videos, preferredItemEncoding: .current) {
                     Label("Photos", systemImage: "photo.on.rectangle")
                 }
                 Button("Files", systemImage: "folder", action: onFiles)
                 Button("Saved videos and links", systemImage: "play.square.stack", action: onSaved)
+                }
+                .listRowBackground(Theme.surface)
             }
+            .scrollContentBackground(.hidden).background(Theme.background)
             .navigationTitle("Choose video")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
             .onChange(of: photosItem) { _, new in if new != nil { dismiss() } }
         }
         .presentationDetents([.medium])
+        .presentationBackground(Theme.background)
     }
 }

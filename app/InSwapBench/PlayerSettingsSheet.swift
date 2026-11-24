@@ -30,10 +30,12 @@ struct PlayerSettingsSheet: View {
                 } footer: {
                     Text("The 8-bit swapper is about 2.4x faster. Strength above 100 adds swap passes in Render ahead: slower, with a stronger likeness. \(costText)")
                 }
+                .listRowBackground(Theme.surface)
                 Section("Storage") {
                     LabeledContent("Render cache", value: cacheText)
                     Button("Clear cache", role: .destructive, action: onClearCache)
                 }
+                .listRowBackground(Theme.surface)
                 if !diagnostics.isEmpty {
                     Section("Diagnostics") {
                         DisclosureGroup("Details") {
@@ -41,12 +43,15 @@ struct PlayerSettingsSheet: View {
                         }
                         Button("Copy diagnostics", action: onCopyDiagnostics)
                     }
+                    .listRowBackground(Theme.surface)
                 }
             }
+            .scrollContentBackground(.hidden).background(Theme.background)
             .navigationTitle("Player settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
         .presentationDetents([.medium, .large])
+        .presentationBackground(Theme.background)
     }
 }

@@ -17,6 +17,7 @@ struct PlayerPreview: View {
         case "player-face":
             FaceSourceSheet(photoItem: .constant(nil), canSave: true, onLibrary: {}, onSave: {}).themed()
         default:
+            let ready = kind == "player-ready"
             let loaded = kind == "player-loaded" || kind == "player-theater"
             PlayerLayout(state: state(loaded), mode: $mode, actions: PlayerLayoutActions(), startInTheater: kind == "player-theater") {
                 LinearGradient(colors: [Color(red: 0.2, green: 0.25, blue: 0.5), Color(red: 0.55, green: 0.3, blue: 0.5)], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -27,7 +28,7 @@ struct PlayerPreview: View {
 
     private func state(_ loaded: Bool) -> PlayerLayoutState {
         var s = PlayerLayoutState()
-        guard loaded else { s.status = "Pick a video and a source face."; return s }
+        guard loaded else { s.videoPicked = kind == "player-ready"; s.status = s.videoPicked ? "Video ready. Now pick a source face (photo or Library)." : "Pick a video and a source face."; return s }
         s.hasVideo = true; s.time = 21; s.duration = 60; s.playing = false
         s.ranges = [0...34, 41...48]
         s.badge = "8-bit · Render ahead"; s.videoDetail = "1:00 · 1280×720"; s.status = "Ready."

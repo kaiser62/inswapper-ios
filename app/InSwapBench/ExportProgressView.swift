@@ -47,9 +47,9 @@ struct ExportProgressView: View {
             }
             HStack(spacing: 12) {
                 Button(session.paused ? "Resume" : "Pause", systemImage: session.paused ? "play.fill" : "pause.fill") { session.setPaused(!session.paused) }
-                    .buttonStyle(.bordered)
-                Button("Cancel", role: .destructive) { confirmCancel = true }.buttonStyle(.bordered)
-            }.controlSize(.large)
+                    .buttonStyle(CompactSoftButtonStyle())
+                Button("Cancel", role: .destructive) { confirmCancel = true }.buttonStyle(CompactSoftButtonStyle()).tint(Theme.bad).foregroundStyle(Theme.bad)
+            }
         }
     }
 
@@ -59,9 +59,9 @@ struct ExportProgressView: View {
             Text("Export finished").font(.title2.bold())
             Text(url.lastPathComponent).font(.footnote).foregroundStyle(.secondary)
             Button { session.saveToPhotos(url) } label: { Label("Save to Photos", systemImage: "square.and.arrow.down").frame(maxWidth: .infinity) }
-                .buttonStyle(.borderedProminent).controlSize(.large)
+                .buttonStyle(PrimaryButtonStyle())
             ShareLink(item: url) { Label("Share", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity) }
-                .buttonStyle(.bordered).controlSize(.large)
+                .buttonStyle(SoftButtonStyle())
             if let m = session.saveMessage { Text(m).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center) }
             Button("Done", action: onClose).padding(.top, 8)
         }
@@ -72,7 +72,7 @@ struct ExportProgressView: View {
             Image(systemName: symbol).font(.system(size: 48)).foregroundStyle(.secondary).accessibilityHidden(true)
             Text(title).font(.title2.bold())
             Text(body).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            Button("Close", action: onClose).buttonStyle(.borderedProminent).controlSize(.large)
+            Button("Close", action: onClose).buttonStyle(PrimaryButtonStyle())
         }
     }
 }

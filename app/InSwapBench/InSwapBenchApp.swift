@@ -16,7 +16,7 @@ struct InSwapBenchApp: App {
     private static var startTab: AppTab {
         switch preview {
         case "photo": return .photo
-        case "library", "library-videos", "faces": return .library
+        case "library", "library-videos", "library-exports", "faces": return .library
         case "settings", "bench", "logs": return .settings
         default: return .player
         }
@@ -37,7 +37,7 @@ struct InSwapBenchApp: App {
             TabView(selection: $router.tab) {
                 PlayerView().tabItem { Label("Player", systemImage: "play.rectangle") }.tag(AppTab.player)
                 PhotoView().tabItem { Label("Photo", systemImage: "face.smiling") }.tag(AppTab.photo)
-                LibraryView(initial: Self.preview == "library-videos" ? .videos : .faces).tabItem { Label("Library", systemImage: "square.stack") }.tag(AppTab.library)
+                LibraryView(initial: Self.preview == "library-videos" ? .videos : Self.preview == "library-exports" ? .exports : .faces).tabItem { Label("Library", systemImage: "square.stack") }.tag(AppTab.library)
                 SettingsView().tabItem { Label("Settings", systemImage: "gearshape") }.tag(AppTab.settings)
             }
         }

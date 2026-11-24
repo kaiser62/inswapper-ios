@@ -12,6 +12,7 @@ struct FaceSourceSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
                 PhotosPicker(selection: $photoItem, matching: .images) {
                     Label("Choose a photo", systemImage: "person.crop.square")
                 }
@@ -19,12 +20,16 @@ struct FaceSourceSheet: View {
                 if canSave {
                     Button("Save this face to the library", systemImage: "square.and.arrow.down") { onSave(); dismiss() }
                 }
+                }
+                .listRowBackground(Theme.surface)
             }
+            .scrollContentBackground(.hidden).background(Theme.background)
             .navigationTitle("Choose face")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
             .onChange(of: photoItem) { _, new in if new != nil { dismiss() } }
         }
         .presentationDetents([.medium])
+        .presentationBackground(Theme.background)
     }
 }

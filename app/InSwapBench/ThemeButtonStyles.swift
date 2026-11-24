@@ -2,6 +2,7 @@ import SwiftUI
 
 /// The one prominent action on a screen.
 struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
@@ -10,7 +11,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .padding(.vertical, 4)
             .background(Theme.accent, in: .rect(cornerRadius: Theme.radiusSmall))
             .shadow(color: Theme.accent.opacity(0.25), radius: 8, y: 2)
-            .opacity(configuration.isPressed ? 0.8 : 1)
+            .opacity(!enabled ? 0.4 : configuration.isPressed ? 0.8 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(Theme.spring, value: configuration.isPressed)
     }

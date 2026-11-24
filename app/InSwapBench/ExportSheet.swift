@@ -22,6 +22,7 @@ struct ExportSheet: View {
                     row("Length", Self.clock(duration))
                     row("Swapper", "\(swapperName), strength \(strength)")
                 }
+                .listRowBackground(Theme.surface)
                 Section {
                     if plan.alreadyRendered > 0 {
                         row("Already rendered", "\(plan.alreadyRendered) of \(plan.frames) frames")
@@ -31,17 +32,20 @@ struct ExportSheet: View {
                 } footer: {
                     Text(enoughSpace ? "Keep the app open while it renders; it pauses by itself if the phone gets too hot or you leave the app, and resumes where it stopped." : "Not enough free space. Free some storage or clear the render cache in Settings, then try again.")
                 }
+                .listRowBackground(Theme.surface)
             }
+            .scrollContentBackground(.hidden).background(Theme.background)
             .navigationTitle("Export video")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
             .safeAreaInset(edge: .bottom) {
                 Button { dismiss(); onStart() } label: { Text("Start export").frame(maxWidth: .infinity) }
-                    .buttonStyle(.borderedProminent).controlSize(.large).disabled(!enoughSpace)
+                    .buttonStyle(PrimaryButtonStyle()).disabled(!enoughSpace)
                     .padding()
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
+        .presentationBackground(Theme.background)
     }
 
     private func row(_ k: String, _ v: String) -> some View {

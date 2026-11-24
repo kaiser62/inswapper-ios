@@ -19,13 +19,13 @@ struct PlayerStage<Video: View>: View {
                         ContentUnavailableView {
                             Label("Video ready", systemImage: "checkmark.circle")
                         } actions: {
-                            Button("Choose face", action: actions.chooseFace).buttonStyle(.borderedProminent).tint(Theme.accent)
+                            Button("Choose face", action: actions.chooseFace).buttonStyle(CompactPrimaryButtonStyle())
                         }
                     } else {
                         ContentUnavailableView {
                             Label("No video yet", systemImage: "film")
                         } actions: {
-                            Button("Choose video", action: actions.chooseVideo).buttonStyle(.borderedProminent).tint(Theme.accent)
+                            Button("Choose video", action: actions.chooseVideo).buttonStyle(CompactPrimaryButtonStyle())
                         }
                     }
                 }
@@ -58,7 +58,7 @@ struct PlayerStage<Video: View>: View {
                 }
             }
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            .containerRelativeFrame(.vertical) { h, _ in theater ? h * 0.8 : h * 0.34 }
+            .modifier(StageSizing(theater: theater, hasVideo: state.hasVideo, aspect: state.aspect))
             if state.hasVideo { transport }
         }
         .background(Theme.surface)
@@ -100,5 +100,15 @@ struct PlayerStage<Video: View>: View {
         }
         .labelStyle(.iconOnly).font(.title3)
         .frame(minWidth: Theme.hit, minHeight: Theme.hit)
+    }
+}
+
+/// Stage height: follows the video's aspect (no letterbox strip), capped so portrait clips leave room for the controls.
+private struct StageSizing: ViewModifier {
+    let theater: Bool, hasVideo: Bool, aspect: CGFloat
+    func body(content: Content) -> some View {
+        if theater { content.containerRelativeFrame(.vertical) { h, _ in h * 0.8 } }
+        else if hasVideo { content.aspectRatio(aspect, contentMode: .fit).frame(maxHeight: 360) }
+        else { content.frame(height: 260) }
     }
 }

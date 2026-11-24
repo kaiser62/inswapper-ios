@@ -19,15 +19,17 @@ struct SettingsView: View {
                 } footer: {
                     Text("Import models.zip here the first time. The benchmark measures how fast this phone swaps a face.")
                 }
+                .listRowBackground(Theme.surface)
                 Section("Diagnostics") {
                     NavigationLink("Logs") { LogsView() }
                     Button(copied ? "Copied" : "Copy logs", systemImage: "doc.on.doc", action: copyLogs)
                 }
+                .listRowBackground(Theme.surface)
                 Section("About") {
                     LabeledContent("Build", value: PlayerVM.build)
                 }
+                .listRowBackground(Theme.surface)
             }
-            .listRowBackground(Theme.surface)
             .scrollContentBackground(.hidden)
             .background(Theme.background)
             .navigationTitle("Settings")

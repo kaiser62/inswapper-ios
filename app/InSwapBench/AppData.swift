@@ -102,7 +102,7 @@ struct FacesView: View {
                     if !store.entries.isEmpty { Text("Touch and hold a face for options. Pick faces in the Photo and Player tabs.").font(.caption).foregroundStyle(.secondary) }
                 }.padding()
             }
-            .navigationTitle("Faces")
+            .navigationTitle("Library")
         .onChange(of: newItems) { _, items in
             guard !items.isEmpty else { return }
             let picked = items; newItems = []
@@ -279,12 +279,13 @@ struct VideoLibrarySheet: View {
                     if !store.message.isEmpty { Text(store.message).font(.footnote).foregroundStyle(.secondary) }
                     Text("Direct links to .mp4 / .mov / .m4v files only (https). Use videos you have the right to use.").font(.caption).foregroundStyle(.secondary)
                 }
+                .listRowBackground(Theme.surface)
                 Section("Saved videos (\(String(format: "%.0f", store.totalMB)) MB)") {
                     if store.entries.isEmpty { Text("Nothing yet.").foregroundStyle(.secondary) }
                     ForEach(store.entries) { e in
                         Button { onPick(e); dismiss() } label: {
                             HStack {
-                                Group { if let t = store.thumbnail(e) { Image(uiImage: t).resizable().scaledToFill() } else { Color.gray.opacity(0.3) } }
+                                Group { if let t = store.thumbnail(e) { Image(uiImage: t).resizable().scaledToFill() } else { Theme.surfaceRaised } }
                                     .frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 6))
                                 VStack(alignment: .leading) {
                                     Text(e.title).lineLimit(1)
@@ -299,7 +300,9 @@ struct VideoLibrarySheet: View {
                         }
                     }
                 }
+                .listRowBackground(Theme.surface)
             }
-            .navigationTitle("Videos")
+            .scrollContentBackground(.hidden).background(Theme.background)
+            .navigationTitle(embedded ? "Library" : "Videos")
     }
 }

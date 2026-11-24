@@ -23,7 +23,7 @@ struct TakesView: View {
         }
         .onAppear(perform: reload)
         .sheet(item: $playing) { t in
-            VideoPlayer(player: AVPlayer(url: t.url)).ignoresSafeArea().themed()
+            TakePlayer(url: t.url).themed()
         }
         .sheet(item: $sharing) { ShareSheet(url: $0) }
         .confirmationDialog("Delete this video?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
@@ -56,5 +56,17 @@ struct TakesView: View {
             let v = try? u.resourceValues(forKeys: Set(keys))
             return Take(url: u, date: v?.contentModificationDate ?? .distantPast, bytes: Int64(v?.fileSize ?? 0))
         }.sorted { $0.date > $1.date }
+    }
+}
+
+/// Holds its AVPlayer in state so it is not recreated on every redraw; plays on appear, stops on disappear.
+private struct TakePlayer: View {
+    let url: URL
+    @State private var player: AVPlayer?
+    var body: some View {
+        VideoPlayer(player: player)
+            .ignoresSafeArea()
+            .onAppear { let p = AVPlayer(url: url); player = p; p.play() }
+            .onDisappear { player?.pause(); player = nil }
     }
 }
