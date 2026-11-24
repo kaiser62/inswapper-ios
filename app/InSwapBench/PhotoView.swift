@@ -225,6 +225,7 @@ struct PhotoView: View {
     @State private var installed = ModelStore.isInstalled
     @State private var viewer: ViewerStart?
     @State private var showFaces = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         NavigationStack {
@@ -237,7 +238,7 @@ struct PhotoView: View {
                             .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall).strokeBorder(Theme.bad.opacity(0.4)))
                     }
                     VStack(spacing: Theme.gap) {
-                        HStack(spacing: Theme.gap) {
+                        (typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: Theme.gap)) : AnyLayout(HStackLayout(spacing: Theme.gap))) {
                             PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square").frame(maxWidth: .infinity) }
                                 .buttonStyle(CompactSoftButtonStyle())
                             Button { showFaces = true } label: { Label("Face library", systemImage: "person.2").frame(maxWidth: .infinity) }.buttonStyle(CompactSoftButtonStyle())
