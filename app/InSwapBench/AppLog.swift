@@ -5,6 +5,7 @@ import SwiftUI
 final class AppLog: ObservableObject, @unchecked Sendable {
     static let shared = AppLog()
     @Published private(set) var text = ""
+    @Published private(set) var lineCount = 0
     private var lines: [String] = []
     private let lock = NSLock()
     private let maxLines = 3000
@@ -21,6 +22,7 @@ final class AppLog: ObservableObject, @unchecked Sendable {
         }
         try? (lines.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
         text = lines.joined(separator: "\n")
+        lineCount = lines.count
     }
 
     static func log(_ s: String, _ tag: String = "app") { shared.add("[\(tag)] \(s)") }
@@ -32,13 +34,14 @@ final class AppLog: ObservableObject, @unchecked Sendable {
         if lines.count > maxLines { lines.removeFirst(lines.count - maxLines) }
         if let h = try? FileHandle(forWritingTo: file) { _ = try? h.seekToEnd(); try? h.write(contentsOf: Data((line + "\n").utf8)); try? h.close() }
         let snapshot = lines.joined(separator: "\n")
+        let count = lines.count
         lock.unlock()
-        DispatchQueue.main.async { self.text = snapshot }
+        DispatchQueue.main.async { self.text = snapshot; self.lineCount = count }
     }
 
     func clear() {
         lock.lock(); lines = []; try? "".write(to: file, atomically: true, encoding: .utf8); lock.unlock()
-        DispatchQueue.main.async { self.text = "" }
+        DispatchQueue.main.async { self.text = ""; self.lineCount = 0 }
     }
 }
 
@@ -50,13 +53,12 @@ struct LogsView: View {
     var body: some View {
             VStack(alignment: .leading, spacing: 10) {
                 (typeSize >= .xxxLarge ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))) {
-                    Button(copied ? "Copied" : "Copy all") { UIPasteboard.general.string = log.text; copied = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false } }
-                        .buttonStyle(CompactPrimaryButtonStyle())
-                    ShareLink(item: log.text) { Label("Share", systemImage: "square.and.arrow.up") }.buttonStyle(CompactSoftButtonStyle())
-                    Button("Clear", role: .destructive) { log.clear() }.buttonStyle(CompactSoftButtonStyle())
-                    if typeSize < .xxxLarge { Spacer() }
-                    Text("\(log.text.split(separator: "\n").count) lines").font(.caption).foregroundStyle(.secondary)
+                    Button(copied ? "Copied" : "Copy all") { UIPasteboard.general.string = log.text; copied = true }
+                        .buttonStyle(CompactPrimaryButtonStyle()).fixedSize()
+                    ShareLink(item: log.text) { Label("Share", systemImage: "square.and.arrow.up") }.buttonStyle(CompactSoftButtonStyle()).fixedSize()
+                    Button("Clear", role: .destructive) { log.clear() }.buttonStyle(CompactSoftButtonStyle()).fixedSize()
+                    if typeSize < .xxxLarge { Spacer(minLength: 0) }
+                    Text("\(log.lineCount) lines").font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -73,5 +75,10 @@ struct LogsView: View {
             .padding()
             .background(Theme.background)
             .navigationTitle("Logs")
+            .task(id: copied) {   // resets the "Copied" label; cancelled if the view goes away
+                guard copied else { return }
+                try? await Task.sleep(for: .seconds(1.5))
+                copied = false
+            }
     }
 }
