@@ -82,10 +82,12 @@ struct FacesView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 12) {
                         ForEach(store.entries, id: \.id) { e in
                             VStack(spacing: 4) {
-                                Group {
-                                    if let img = store.thumbnail(e.id) { Image(uiImage: img).resizable().scaledToFill() } else { Theme.surfaceRaised }
-                                }
-                                .aspectRatio(1, contentMode: .fit)
+                                // The square comes from the clear base, so every tile is the same size whatever the photo's proportions.
+                                Color.clear
+                                    .aspectRatio(1, contentMode: .fit)
+                                    .overlay {
+                                        if let img = store.thumbnail(e.id) { Image(uiImage: img).resizable().scaledToFill() } else { Theme.surfaceRaised }
+                                    }
                                 .clipShape(.rect(cornerRadius: Theme.radiusSmall))
                                 .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall).strokeBorder(Theme.line))
                                 Text(e.name).font(.footnote.weight(.semibold)).lineLimit(1)
