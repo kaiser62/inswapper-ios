@@ -20,10 +20,10 @@ struct PlayerSettingsSheet: View {
                     if hasFast {
                         Toggle("Fast 8-bit swapper", isOn: $fastSwapper)
                     }
-                    Picker("Strength", selection: $strength) {
-                        Text("100").tag(100); Text("150").tag(150); Text("200").tag(200); Text("300").tag(300)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Strength")
+                        Segmented(options: [("100", 100), ("150", 150), ("200", 200), ("300", 300)], selection: $strength)
                     }
-                    .pickerStyle(.segmented)
                     Toggle("Live preview where not rendered yet", isOn: $combo)
                 } header: {
                     Text("Quality")

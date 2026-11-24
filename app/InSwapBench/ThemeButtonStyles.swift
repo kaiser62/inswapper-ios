@@ -6,12 +6,12 @@ struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
-            .foregroundStyle(Theme.background)
+            .foregroundStyle(enabled ? Theme.background : Theme.muted)
             .frame(maxWidth: .infinity, minHeight: Theme.hit)
             .padding(.vertical, 4)
-            .background(Theme.accent, in: .rect(cornerRadius: Theme.radiusSmall))
-            .shadow(color: Theme.accent.opacity(0.25), radius: 8, y: 2)
-            .opacity(!enabled ? 0.4 : configuration.isPressed ? 0.8 : 1)
+            .background(enabled ? Theme.accent : Theme.surfaceRaised, in: .rect(cornerRadius: Theme.radiusSmall))
+            .shadow(color: Theme.accent.opacity(enabled ? 0.25 : 0), radius: 8, y: 2)
+            .opacity(configuration.isPressed ? 0.8 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(Theme.spring, value: configuration.isPressed)
     }
@@ -37,20 +37,21 @@ struct CompactPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Theme.background)
+            .foregroundStyle(enabled ? Theme.background : Theme.muted)
             .padding(.horizontal, Theme.gap).frame(minHeight: Theme.hit)
-            .background(Theme.accent, in: .rect(cornerRadius: Theme.radiusSmall))
-            .opacity(!enabled ? 0.4 : configuration.isPressed ? 0.8 : 1)
+            .background(enabled ? Theme.accent : Theme.surfaceRaised, in: .rect(cornerRadius: Theme.radiusSmall))
+            .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }
 
 /// Compact quiet button: raised surface with a hairline border.
 struct CompactSoftButtonStyle: ButtonStyle {
+    var tint: Color = Theme.accent
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Theme.accent)
+            .foregroundStyle(tint)
             .padding(.horizontal, Theme.gap).frame(minHeight: Theme.hit)
             .background(Theme.surface, in: .rect(cornerRadius: Theme.radiusSmall))
             .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall).strokeBorder(Theme.line))

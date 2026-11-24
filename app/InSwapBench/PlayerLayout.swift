@@ -97,7 +97,6 @@ struct PlayerLayout<Video: View>: View {
                 Button("Export video", systemImage: "square.and.arrow.up", action: actions.export)
                     .buttonStyle(PrimaryButtonStyle())
                     .disabled(!state.hasVideo)
-                    .opacity(state.hasVideo ? 1 : 0.4)
                 Button("Settings", systemImage: "slider.horizontal.3", action: actions.settings)
                     .labelStyle(.iconOnly).font(.title3)
                     .buttonStyle(SoftButtonStyle())

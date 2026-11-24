@@ -231,21 +231,26 @@ struct PhotoView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     if !installed {
-                        Text("Models are not installed. Import models.zip in the Models & Bench tab first.").foregroundStyle(.red)
+                        Label("Models are not installed. Import models.zip in Settings, under Models and benchmark.", systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(Theme.bad)
+                            .padding(Theme.gap).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Theme.bad.opacity(0.1), in: .rect(cornerRadius: Theme.radiusSmall))
+                            .overlay(RoundedRectangle(cornerRadius: Theme.radiusSmall).strokeBorder(Theme.bad.opacity(0.4)))
                     }
-                    HStack {
-                        PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square") }
-                            .buttonStyle(CompactSoftButtonStyle())
-                        Button { showFaces = true } label: { Label("Library", systemImage: "person.2") }.buttonStyle(CompactSoftButtonStyle())
-                        PhotosPicker(selection: $tgtItems, maxSelectionCount: 12, matching: .images) { Label("Target photos", systemImage: "photo.stack") }
+                    VStack(spacing: Theme.gap) {
+                        HStack(spacing: Theme.gap) {
+                            PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square").frame(maxWidth: .infinity) }
+                                .buttonStyle(CompactSoftButtonStyle())
+                            Button { showFaces = true } label: { Label("Face library", systemImage: "person.2").frame(maxWidth: .infinity) }.buttonStyle(CompactSoftButtonStyle())
+                        }
+                        PhotosPicker(selection: $tgtItems, maxSelectionCount: 12, matching: .images) { Label("Target photos", systemImage: "photo.stack").frame(maxWidth: .infinity) }
                             .buttonStyle(CompactSoftButtonStyle())
                     }
                     .disabled(vm.busy || !installed)
                     if let s = vm.sourceImage {
-                        Image(decorative: s, scale: 1).resizable().scaledToFit().frame(height: 110).clipShape(RoundedRectangle(cornerRadius: 8))
+                        Image(decorative: s, scale: 1).resizable().scaledToFit().frame(height: 110).clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
                     }
                     Button("Swap all (\(vm.jobs.filter { !$0.selected.isEmpty }.count))") { vm.swapAll() }
-                        .buttonStyle(CompactPrimaryButtonStyle())
+                        .buttonStyle(PrimaryButtonStyle())
                         .disabled(vm.busy || vm.sourceImage == nil || vm.jobs.allSatisfy { $0.selected.isEmpty })
                     if !vm.jobs.isEmpty {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 6)], spacing: 6) {
@@ -257,7 +262,7 @@ struct PhotoView: View {
                                         Text(job.resultURL != nil ? "swapped" : (job.note.isEmpty ? "\(job.faces.count) face(s)" : job.note))
                                             .font(.caption2.bold()).padding(3).background(.black.opacity(0.6)).foregroundStyle(.white)
                                     }
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusChip))
                                 }
                             }
                         }
@@ -266,12 +271,14 @@ struct PhotoView: View {
                         }
                     }
                     if vm.busy { ProgressView() }
-                    Text(vm.status).font(.footnote)
+                    Text(vm.status).font(.footnote).foregroundStyle(Theme.muted)
                     Text(vm.timings).font(.system(.caption2, design: .monospaced)).textSelection(.enabled)
                 }
                 .padding()
             }
-            .navigationTitle("InSwap")
+            .background(Theme.background)
+            .navigationTitle("Photo swap")
+            .navigationBarTitleDisplayMode(.inline)
         }
         .sheet(isPresented: $showFaces) { FacePickerSheet { vm.setLibraryFace($0) } }
         .fullScreenCover(item: $viewer) { start in ResultViewer(vm: vm, index: start.index) }

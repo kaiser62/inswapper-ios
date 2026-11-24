@@ -70,6 +70,7 @@ struct LogsView: View {
                 }
             }
             .padding()
+            .background(Theme.background)
             .navigationTitle("Logs")
     }
 }

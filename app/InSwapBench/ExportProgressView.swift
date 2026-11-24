@@ -48,7 +48,7 @@ struct ExportProgressView: View {
             HStack(spacing: 12) {
                 Button(session.paused ? "Resume" : "Pause", systemImage: session.paused ? "play.fill" : "pause.fill") { session.setPaused(!session.paused) }
                     .buttonStyle(CompactSoftButtonStyle())
-                Button("Cancel", role: .destructive) { confirmCancel = true }.buttonStyle(CompactSoftButtonStyle()).tint(Theme.bad).foregroundStyle(Theme.bad)
+                Button("Cancel", role: .destructive) { confirmCancel = true }.buttonStyle(CompactSoftButtonStyle(tint: Theme.bad))
             }
         }
     }
