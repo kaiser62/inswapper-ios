@@ -53,9 +53,15 @@ final class PlayerEngine {
     // MARK: transport
     var currentTime: Double { player.currentTime().seconds }
     var duration: Double { reader.duration }
-    var isPlaying: Bool { player.rate != 0 }
-    func play() { player.play() }
-    func pause() { player.pause(); renderStore.flush() }
+    private var wantsPlay = false, speed = 1.0
+    var isPlaying: Bool { player.rate != 0 || (wantsPlay && speed == 0) }
+    func play() { wantsPlay = true; player.defaultRate = Float(speed); player.play() }
+    func pause() { wantsPlay = false; player.pause(); renderStore.flush() }
+    /// 0x...1x. At 0 the picture holds (playhead frozen) but the play state is kept; raising it resumes.
+    func setSpeed(_ v: Double) {
+        speed = min(1, max(0, v)); player.defaultRate = Float(speed)
+        if wantsPlay { player.rate = Float(speed) }
+    }
 
     /// While dragging a scrubber: move the playhead only (raw frames; workers keep going, restart happens on `seek`).
     func scrub(to t: Double) {

@@ -60,6 +60,8 @@ final class PlayerVM: ObservableObject {
     @Published var statsText = ""
     @Published var scrubbing = false
     @Published var overlay = true
+    @Published var speed = 1.0
+    func setSpeed(_ v: Double) { speed = v; engine?.setSpeed(v) }
     func toggleOverlay() { overlay.toggle(); engine?.overlayOn = overlay }
     let presenter = MetalPresenter()
     let export = ExportSession()
@@ -138,7 +140,7 @@ final class PlayerVM: ObservableObject {
                 currentIdentity = identity
                 let e = PlayerEngine(pipeline: pipe, reader: reader, latent: latent, strength: strength, cacheDirectory: dir, identity: identity)
                 e.mode = mode; e.combo = combo
-                duration = reader.duration; e.overlayOn = overlay; engine = e
+                duration = reader.duration; e.overlayOn = overlay; e.setSpeed(speed); engine = e
                 e.start()
                 AppLog.log("engine ready: \(reader.width)x\(reader.height) \(reader.duration) s hdr \(reader.isHDR) mode \(mode.rawValue) combo \(combo) swapper \(fastSwapper && ModelStore.hasPal8 ? "8-bit" : "FP16") strength \(strength)", "player")
                 status = "Ready. \(Int(reader.duration)) s, \(reader.width)×\(reader.height). Mode \(mode.rawValue), \(fastSwapper && ModelStore.hasPal8 ? "8-bit" : "FP16") swapper."
@@ -265,14 +267,14 @@ struct PlayerView: View {
         }
         s.time = vm.time; s.duration = vm.duration; s.playing = vm.playing; s.ranges = vm.ranges
         s.badge = vm.engine == nil ? "" : "\(vm.swapperName) · \(vm.mode == .renderAhead ? "Render ahead" : "Live")"
-        s.overlay = vm.overlay; s.face = vm.sourceImage; s.status = vm.status; s.busy = vm.busy
+        s.overlay = vm.overlay; s.speed = vm.speed; s.face = vm.sourceImage; s.status = vm.status; s.busy = vm.busy
         return s
     }
 
     private var actions: PlayerLayoutActions {
         PlayerLayoutActions(chooseVideo: { showVideoSource = true }, chooseFace: { showFaceSource = true },
                             togglePlay: { vm.togglePlay() }, export: { vm.openExportSheet() }, settings: { openSettings() },
-                            scrub: { vm.scrub($0) }, toggleOverlay: { vm.toggleOverlay() }, scrubStart: { vm.scrubbing = true }, scrubEnd: { vm.endScrub() })
+                            toggleOverlay: { vm.toggleOverlay() }, setSpeed: { vm.setSpeed($0) }, scrub: { vm.scrub($0) }, scrubStart: { vm.scrubbing = true }, scrubEnd: { vm.endScrub() })
     }
 
     var body: some View {

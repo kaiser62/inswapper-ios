@@ -14,6 +14,7 @@ struct PlayerLayoutState {
     var status = ""
     var busy = false
     var overlay = true
+    var speed = 1.0
 }
 
 struct PlayerLayoutActions {
@@ -23,6 +24,7 @@ struct PlayerLayoutActions {
     var export: () -> Void = {}
     var settings: () -> Void = {}
     var toggleOverlay: () -> Void = {}
+    var setSpeed: (Double) -> Void = { _ in }
     var scrub: (Double) -> Void = { _ in }
     var scrubStart: () -> Void = {}
     var scrubEnd: () -> Void = {}
@@ -54,6 +56,7 @@ struct PlayerLayout<Video: View>: View {
                     }
                     .buttonStyle(SoftButtonStyle())
                     PlayerModeCard(mode: $mode)
+                    if state.hasVideo { speedCard }
                     if !state.status.isEmpty {
                         Label(state.status, systemImage: state.busy ? "hourglass" : "info.circle")
                             .font(.footnote).foregroundStyle(.secondary)
@@ -71,6 +74,21 @@ struct PlayerLayout<Video: View>: View {
         .onChange(of: state.status) { _, new in
             if !new.isEmpty { AccessibilityNotification.Announcement(new).post() }   // loading steps and errors are otherwise silent
         }
+    }
+
+    private var speedCard: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Playback speed").font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(String(format: "%.2f×", state.speed)).font(.subheadline.monospacedDigit()).foregroundStyle(Theme.accent)
+                if state.speed < 1 { Button("1×") { actions.setSpeed(1) }.buttonStyle(CompactSoftButtonStyle()) }
+            }
+            Slider(value: Binding(get: { state.speed }, set: { actions.setSpeed(($0 * 20).rounded() / 20) }), in: 0...1)
+                .accessibilityLabel("Playback speed").accessibilityValue(String(format: "%.2f times", state.speed))
+        }
+        .padding(Theme.gap)
+        .card()
     }
 
     private var exportBar: some View {
