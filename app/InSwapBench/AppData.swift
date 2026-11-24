@@ -80,7 +80,7 @@ struct FacesView: View {
                         Button { importing = true } label: { Label("Restore", systemImage: "square.and.arrow.down") }.buttonStyle(SoftButtonStyle())
                     }.font(.footnote)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 12) {
-                        ForEach(store.entries, id: \.id) { e in
+                        ForEach(store.entries) { e in
                             VStack(spacing: 4) {
                                 // The square comes from the clear base, so every tile is the same size whatever the photo's proportions.
                                 Color.clear
@@ -94,6 +94,9 @@ struct FacesView: View {
                                 Text("\(e.photoCount) photo\(e.photoCount == 1 ? "" : "s")").font(.caption2).foregroundStyle(Theme.muted)
                             }
                             .accessibilityElement(children: .combine)
+                            .accessibilityAction(named: "Add photos") { addTarget = e; showAddPicker = true }
+                            .accessibilityAction(named: "Rename") { newName = e.name; renaming = e }
+                            .accessibilityAction(named: "Delete") { store.delete(e.id) }
                             .contextMenu {
                                 Button("Add photos") { addTarget = e; showAddPicker = true }
                                 Button("Rename") { newName = e.name; renaming = e }
@@ -170,13 +173,13 @@ struct FacePickerSheet: View {
                 else {
                     ScrollView {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 12) {
-                            ForEach(store.entries, id: \.id) { e in
+                            ForEach(store.entries) { e in
                                 Button { onPick(e); dismiss() } label: {
                                     VStack {
                                         Group { if let img = store.thumbnail(e.id) { Image(uiImage: img).resizable().scaledToFill() } else { Theme.surface } }
                                             .frame(width: 90, height: 90).clipShape(Circle())
                                             .overlay(Circle().strokeBorder(Theme.accent.opacity(0.35), lineWidth: 1))
-                                        Text(e.name).font(.footnote).foregroundStyle(.primary).lineLimit(1)
+                                        Text(e.name).font(.footnote).lineLimit(1)
                                     }
                                 }.buttonStyle(.plain)
                             }

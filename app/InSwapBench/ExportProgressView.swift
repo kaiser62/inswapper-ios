@@ -21,10 +21,19 @@ struct ExportProgressView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
         .interactiveDismissDisabled()
+        .sensoryFeedback(.impact(weight: .medium), trigger: session.paused)
+        .sensoryFeedback(trigger: outcome) { _, new in
+            switch new { case 1: .success; case 2: .error; case 3: .warning; default: nil }
+        }
         .confirmationDialog("Cancel export?", isPresented: $confirmCancel, titleVisibility: .visible) {
             Button("Cancel export", role: .destructive) { session.cancel() }
             Button("Keep exporting", role: .cancel) {}
         } message: { Text("Rendered frames are kept, so you can resume later.") }
+    }
+
+    /// 0 while running; 1 done, 2 failed, 3 cancelled (drives the result haptic).
+    private var outcome: Int {
+        switch session.state { case .done: 1; case .failed: 2; case .cancelled: 3; default: 0 }
     }
 
     private var running: some View {
@@ -39,6 +48,8 @@ struct ExportProgressView: View {
                 .accessibilityValue("\(Int(session.fraction * 100)) percent")
             VStack(spacing: 4) {
                 Text("\(session.done) of \(session.total) frames").monospacedDigit()
+                    .contentTransition(.numericText(value: Double(session.done)))
+                    .animation(.default, value: session.done)
                 Text(session.secondsLeft.map { "About \(ExportSheet.minutes($0)) left" } ?? "Estimating time…").foregroundStyle(.secondary)
                 if session.thermal.rawValue >= ProcessInfo.ThermalState.serious.rawValue {
                     Label(PlayerVM.thermalName(session.thermal) == "CRITICAL" ? "Phone is very hot: paused until it cools" : "Phone is hot; it may run slower", systemImage: "thermometer.high")

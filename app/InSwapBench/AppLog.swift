@@ -75,6 +75,7 @@ struct LogsView: View {
             .padding()
             .background(Theme.background)
             .navigationTitle("Logs")
+            .sensoryFeedback(trigger: copied) { _, new in new ? .success : nil }
             .task(id: copied) {   // resets the "Copied" label; cancelled if the view goes away
                 guard copied else { return }
                 try? await Task.sleep(for: .seconds(1.5))

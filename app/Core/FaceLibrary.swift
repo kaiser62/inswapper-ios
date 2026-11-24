@@ -4,7 +4,7 @@ import Foundation
 /// (so photos can be added later and averaged), and an optional small JPEG thumbnail. The source photo itself is never stored.
 /// Pure Foundation: UI and ML live elsewhere. Everything stays in `directory` (app data, never in git).
 final class FaceLibrary {
-    struct Entry: Codable, Equatable { var id: String, name: String, created: Date, photoCount: Int }
+    struct Entry: Codable, Equatable, Identifiable { var id: String, name: String, created: Date, photoCount: Int }
 
     let directory: URL
     private(set) var entries: [Entry] = []

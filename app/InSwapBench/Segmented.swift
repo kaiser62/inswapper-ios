@@ -24,5 +24,6 @@ struct Segmented<Value: Hashable>: View {
         }
         .padding(4)
         .background(Theme.background, in: .rect(cornerRadius: Theme.radiusSmall))
+        .sensoryFeedback(.selection, trigger: selection)
     }
 }

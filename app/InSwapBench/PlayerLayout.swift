@@ -83,9 +83,11 @@ struct PlayerLayout<Video: View>: View {
                 Text("Playback speed").font(.subheadline.weight(.semibold))
                 Spacer()
                 Text(String(format: "%.2f×", state.speed)).font(.subheadline.monospacedDigit()).foregroundStyle(Theme.accent)
+                    .contentTransition(.numericText(value: state.speed)).animation(Theme.spring, value: state.speed)
                 Button("1×") { actions.setSpeed(1) }.font(.subheadline.weight(.bold)).foregroundStyle(Theme.accent).frame(minWidth: 32, minHeight: 28).opacity(state.speed < 1 ? 1 : 0).disabled(state.speed >= 1).accessibilityHidden(state.speed >= 1)
             }
             Slider(value: Binding(get: { state.speed }, set: { actions.setSpeed(($0 * 20).rounded() / 20) }), in: 0...1)
+                .sensoryFeedback(.selection, trigger: state.speed)
                 .accessibilityLabel("Playback speed").accessibilityValue(String(format: "%.2f times", state.speed))
         }
         .padding(Theme.gap)

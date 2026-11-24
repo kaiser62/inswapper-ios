@@ -7,6 +7,7 @@ struct PlayerStage<Video: View>: View {
     @ViewBuilder let video: () -> Video
 
     @Binding var theater: Bool
+    @State private var skips = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,7 +44,9 @@ struct PlayerStage<Video: View>: View {
                                     .foregroundStyle(state.overlay ? Theme.accent : Theme.muted)
                                     .background(.black.opacity(0.55), in: Capsule())
                             }
+                            .sensoryFeedback(.selection, trigger: state.overlay)
                             .accessibilityLabel("Face swap overlay")
+                            .accessibilityInputLabels([state.overlay ? "Swap on" : "Swap off", "Face swap overlay"])   // Voice Control: the words on screen still work
                             .accessibilityValue(state.overlay ? "On" : "Off")
                             Button(theater ? "Exit theater" : "Theater", systemImage: theater ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
                                 withAnimation(Theme.spring) { theater.toggle() }
@@ -73,6 +76,8 @@ struct PlayerStage<Video: View>: View {
                            onScrub: actions.scrub, onStart: actions.scrubStart, onEnd: actions.scrubEnd)
             HStack(spacing: Theme.gap) {
                 Text(PlayerScrubber.clock(state.time)).font(.footnote.monospacedDigit())
+                    .contentTransition(.numericText(value: state.time))
+                    .animation(Theme.spring, value: Int(state.time))
                 Spacer()
                 skip("Back 5 seconds", "gobackward.5", -5)
                 Button(state.playing ? "Pause" : "Play", systemImage: state.playing ? "pause.fill" : "play.fill", action: actions.togglePlay)
@@ -81,6 +86,7 @@ struct PlayerStage<Video: View>: View {
                     .frame(width: Theme.hit, height: Theme.hit)
                     .background(Theme.accent, in: Circle())
                     .shadow(color: Theme.accent.opacity(0.25), radius: 6, y: 2)
+                    .sensoryFeedback(.impact(weight: .medium), trigger: state.playing)
                 skip("Forward 5 seconds", "goforward.5", 5)
                 Spacer()
                 Text(PlayerScrubber.clock(state.duration)).font(.footnote.monospacedDigit())
@@ -97,9 +103,11 @@ struct PlayerStage<Video: View>: View {
             actions.scrubStart()
             actions.scrub(min(max(0, state.time + delta), state.duration))
             actions.scrubEnd()
+            skips += 1
         }
         .labelStyle(.iconOnly).font(.title3)
         .frame(minWidth: Theme.hit, minHeight: Theme.hit)
+        .sensoryFeedback(.impact(weight: .light), trigger: skips)
     }
 }
 

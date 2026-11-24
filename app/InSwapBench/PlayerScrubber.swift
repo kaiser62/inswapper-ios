@@ -34,6 +34,7 @@ struct PlayerScrubber: View {
                 .onEnded { _ in dragging = false; onEnd() })
         }
         .frame(height: Theme.hit)
+        .sensoryFeedback(.impact(weight: .light), trigger: dragging)
         .accessibilityElement()
         .accessibilityLabel("Playback position")
         .accessibilityValue("\(Self.clock(time)) of \(Self.clock(duration))\(renderedSummary)")

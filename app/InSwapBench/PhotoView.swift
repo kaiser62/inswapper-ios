@@ -344,12 +344,14 @@ struct ResultViewer: View {
             .ignoresSafeArea()
             VStack {
                 HStack {
-                    Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title) }
+                    Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.title).frame(minWidth: Theme.hit, minHeight: Theme.hit) }
+                        .accessibilityLabel("Close")
                     Spacer()
                     Text("\(index + 1) / \(vm.jobs.count)").font(.subheadline.bold())
                     Spacer()
                     if index < vm.jobs.count, let url = vm.jobs[index].resultURL {
-                        ShareLink(item: url) { Image(systemName: "square.and.arrow.up").font(.title2) }
+                        ShareLink(item: url) { Image(systemName: "square.and.arrow.up").font(.title2).frame(minWidth: Theme.hit, minHeight: Theme.hit) }
+                            .accessibilityLabel("Share photo")
                     }
                 }
                 .padding().foregroundStyle(.white)
@@ -392,7 +394,8 @@ struct FaceEditSheet: View {
                                         .overlay(Text("\(i + 1)").font(.caption.bold()).padding(3).background(.black.opacity(0.6)).foregroundStyle(.white)
                                             .position(x: f.x1 * kx * k + 10, y: f.y1 * kx * k + 10))
                                 }
-                            })
+                            }
+                            .accessibilityHidden(true))   // the Face 1, Face 2 toggles below do the same job with real labels
                         if job.faces.isEmpty {
                             Text("No face detected in this photo.")
                         } else {
