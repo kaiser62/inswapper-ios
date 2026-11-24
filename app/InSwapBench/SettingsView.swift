@@ -12,7 +12,10 @@ struct SettingsView: View {
                     NavigationLink {
                         ContentView()
                     } label: {
-                        LabeledContent("Models and benchmark", value: ModelStore.isInstalled ? "Installed" : "Import needed")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Models and benchmark")
+                            Text(ModelStore.isInstalled ? "Installed" : "Import needed").font(.footnote).foregroundStyle(ModelStore.isInstalled ? Theme.good : Theme.warn)
+                        }
                     }
                 } header: {
                     Text("Models")
