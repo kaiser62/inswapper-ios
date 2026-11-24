@@ -103,6 +103,8 @@ struct ContentView: View {
                         .buttonStyle(CompactSoftButtonStyle()).disabled(vm.busy || !vm.installed)
                     Button("Compare 8-bit swapper") { vm.run { log in await Bench.swapperCompare(log: log) } }
                         .buttonStyle(CompactSoftButtonStyle()).disabled(vm.busy || !vm.installed)
+                    Button("Parallel swappers") { vm.run { log in await Bench.parallelSwapper(log: log) } }
+                        .buttonStyle(CompactSoftButtonStyle()).disabled(vm.busy || !vm.installed)
                     Button("5 min FP16") { vm.run { log in await Bench.sustainedSwapper("swapper", seconds: 300, log: log) } }
                         .buttonStyle(CompactSoftButtonStyle()).disabled(vm.busy || !vm.installed)
                     Button("5 min 8-bit") { vm.run { log in await Bench.sustainedSwapper("swapper_pal8", seconds: 300, log: log) } }

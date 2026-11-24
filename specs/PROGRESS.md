@@ -167,3 +167,8 @@ Both are review-only guidance; no commands/fetches/settings changes. Installed t
 ## 2026-11-24 Build 70 on device (commit 7251950)
 - Verified on the phone: Library > Faces tiles (Face 1, Face 2) are equal squares regardless of photo proportions; Settings shows Build 70. Installed via LiveContainer replace-install.
 - Local builds: tools/ipa.sh builds the same unsigned IPA on the Mac (about 30 s); tools/ipa.sh -s serves it on the LAN for Install from URL. Local build number defaults to 9000.
+
+## 2026-11-24 Parallel swappers bench (local build 9000, iPhone 14 Pro, thermal nominal)
+- Question: do more swap workers raise swaps/s? Bench.parallelSwapper runs N threads back to back (swap + readback + BGR conversion), separate MLModel per thread vs one shared MLModel.
+- Result: no. 8-bit (swapper_pal8): N=1 16.1/s, N=2 16.25, N=3 16.5, N=4 16.5 (x1.01-1.02). FP16: N=1 6.75/s, N=2 6.9, N=3 7.1 (x1.02-1.06). Separate and shared instances behave the same; each thread just gets 1/N of the same total.
+- Meaning: the Neural Engine is the serial bottleneck and runs one swapper at a time. Extra workers add memory and heat, no speed. Real gains must come from a cheaper model or fewer swaps (skip frames / lower rate), not parallelism. Overlapping CPU-side work (detect, warp, paste-back) with the ANE swap is already covered by Render ahead's two workers.

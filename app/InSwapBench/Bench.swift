@@ -253,6 +253,62 @@ enum Bench {
         await MainActor.run { UIApplication.shared.isIdleTimerDisabled = false }
     }
 
+    /// Would more swap workers raise total swaps/s? N threads swap back to back for `seconds` each, with the same per-swap CPU work as
+    /// FacePipeline.swapPass (latent array, output readback, planar RGB -> BGR). "separate" = one MLModel per thread, "shared" = one
+    /// MLModel called from all threads. Read the speedup column against N=1 of the same model.
+    static func parallelSwapper(seconds: Int = 8, log: @escaping (String) -> Void) async {
+        log("\n== parallel swappers: N threads back to back, \(seconds) s per row, cpuAndNeuralEngine")
+        await MainActor.run { UIApplication.shared.isIdleTimerDisabled = true }
+        var models = ["swapper"]
+        if ModelStore.hasPal8 { models.insert("swapper_pal8", at: 0) }
+        do {
+            let target = pixelBuffer(128)
+            func makeInput() throws -> MLFeatureProvider {
+                let latent = try MLMultiArray(shape: [1, 512], dataType: .float32)
+                for i in 0..<512 { latent[i] = NSNumber(value: (i % 2 == 0 ? 1 : -1) / Float(512).squareRoot()) }
+                return try MLDictionaryFeatureProvider(dictionary: ["target": MLFeatureValue(pixelBuffer: target), "latent": MLFeatureValue(multiArray: latent)])
+            }
+            /// One swap as the app does it.
+            func swapOnce(_ m: MLModel, _ inp: MLFeatureProvider) throws {
+                let out = try m.prediction(from: inp)
+                guard let p = out.featureValue(for: "swapped")?.multiArrayValue?.toFloats(), p.count == 3 * 128 * 128 else { return }
+                var bgr = [UInt8](repeating: 0, count: 128 * 128 * 3)
+                let plane = 128 * 128
+                for i in 0..<plane { for c in 0..<3 { bgr[i * 3 + c] = UInt8(max(0, min(255, 255 * p[(2 - c) * plane + i]))) } }
+                if bgr[0] == 255 && bgr[1] == 254 && bgr[2] == 253 { log("") }   // keeps the loop from being optimised away
+            }
+            for name in models {
+                var base = 0.0
+                for (n, shared) in [(1, false), (2, false), (2, true), (3, false), (3, true), (4, false), (4, true)] {
+                    let sharedModel = shared ? try load(name, .cpuAndNeuralEngine) : nil
+                    let instances = try (0..<n).map { _ in try sharedModel ?? load(name, .cpuAndNeuralEngine) }
+                    let inputs = try (0..<n).map { _ in try makeInput() }
+                    for k in 0..<n { for _ in 0..<3 { try swapOnce(instances[k], inputs[k]) } }   // warm each instance
+                    var counts = [Int](repeating: 0, count: n)
+                    let lock = NSLock(), done = DispatchGroup()
+                    let end = nowMs() + Double(seconds) * 1000
+                    for k in 0..<n {
+                        done.enter()
+                        Thread.detachNewThread {
+                            var c = 0
+                            while nowMs() < end { try? swapOnce(instances[k], inputs[k]); c += 1 }
+                            lock.lock(); counts[k] = c; lock.unlock(); done.leave()
+                        }
+                    }
+                    await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in done.notify(queue: .global()) { c.resume() } }
+                    let total = Double(counts.reduce(0, +)) / Double(seconds)
+                    if n == 1 { base = total }
+                    log(String(format: "%@ N=%d %@: %.2f swaps/s total (%@) x%.2f vs N=1, thermal %@",
+                               name, n, n == 1 ? "single " : (shared ? "shared  " : "separate"), total,
+                               counts.map { String(format: "%.1f", Double($0) / Double(seconds)) }.joined(separator: " + "),
+                               base > 0 ? total / base : 0, thermal()))
+                }
+            }
+        } catch { log("parallel swappers FAILED \(error.localizedDescription)") }
+        await MainActor.run { UIApplication.shared.isIdleTimerDisabled = false }
+        log("DONE")
+    }
+
     @available(iOS 17.4, *)
     static func placement(_ name: String) async throws -> String {
         let cfg = MLModelConfiguration()
