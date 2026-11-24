@@ -4,7 +4,7 @@
 #   tools/sim.sh player settings         only these screens
 #   tools/sim.sh -x player library       at the largest accessibility text size
 #   tools/sim.sh -l -x                   list screens / shoot all at xxl
-# Options: -x xxl text (accessibility-extra-large), -n skip build, -l list screens, -d <device name>
+# Options: -x xxl text (accessibility-extra-large, not the maximum), -n skip build, -l list screens, -d <device name>
 # Output: build/sim-shots/<screen>_<large|xxl>.png (build/ is gitignored). Placeholder content only; no models, faces or videos.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
