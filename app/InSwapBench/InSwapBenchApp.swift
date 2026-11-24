@@ -116,6 +116,7 @@ struct ContentView: View {
                 }
             }
             .padding()
+            .background(Theme.background)
             .navigationTitle("Models and benchmark")
         .fileImporter(isPresented: $picking, allowedContentTypes: [.zip]) { result in
             if case let .success(url) = result { vm.importPicked(url) }

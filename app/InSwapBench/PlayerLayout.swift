@@ -14,6 +14,7 @@ struct PlayerLayoutState {
     var status = ""
     var busy = false
     var overlay = true
+    var videoPicked = false
     var speed = 1.0
 }
 
@@ -48,7 +49,7 @@ struct PlayerLayout<Video: View>: View {
                     let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: Theme.gap)) : AnyLayout(HStackLayout(spacing: Theme.gap))
                     layout {
                         Button(action: actions.chooseVideo) {
-                            SourceChip(title: "Video", detail: state.videoDetail ?? "Choose", systemImage: "film")
+                            SourceChip(title: "Video", detail: state.videoDetail ?? (state.videoPicked ? "Ready" : "Choose"), systemImage: "film")
                         }
                         Button(action: actions.chooseFace) {
                             SourceChip(title: "Face", detail: state.face == nil ? "Choose" : "Selected", systemImage: "person.crop.square", thumbnail: state.face)

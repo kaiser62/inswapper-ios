@@ -59,6 +59,7 @@ final class PlayerVM: ObservableObject {
     @Published var ranges: [ClosedRange<Double>] = []
     @Published var statsText = ""
     @Published var scrubbing = false
+    @Published var videoPicked = false
     @Published var overlay = true
     @Published var speed = 1.0
     func setSpeed(_ v: Double) { speed = v; engine?.setSpeed(v) }
@@ -119,6 +120,7 @@ final class PlayerVM: ObservableObject {
 
     private func prepare() {
         guard let url = videoURL else { return }
+        videoPicked = true
         guard let latent = sourceLatent else { status = "Video ready. Now pick a source face (photo or Library)."; return }
         if busy { needsPrepare = true; return }   // a pick made while loading is applied when this finishes
         busy = true
@@ -267,7 +269,7 @@ struct PlayerView: View {
         }
         s.time = vm.time; s.duration = vm.duration; s.playing = vm.playing; s.ranges = vm.ranges
         s.badge = vm.engine == nil ? "" : "\(vm.swapperName) · \(vm.mode == .renderAhead ? "Render ahead" : "Live")"
-        s.overlay = vm.overlay; s.speed = vm.speed; s.face = vm.sourceImage; s.status = vm.status; s.busy = vm.busy
+        s.videoPicked = vm.videoPicked; s.overlay = vm.overlay; s.speed = vm.speed; s.face = vm.sourceImage; s.status = vm.status; s.busy = vm.busy
         return s
     }
 

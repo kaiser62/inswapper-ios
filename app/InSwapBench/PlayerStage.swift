@@ -15,10 +15,18 @@ struct PlayerStage<Video: View>: View {
                 if state.hasVideo {
                     video().aspectRatio(state.aspect, contentMode: .fit)
                 } else {
-                    ContentUnavailableView {
-                        Label("No video yet", systemImage: "film")
-                    } actions: {
-                        Button("Choose video", action: actions.chooseVideo).buttonStyle(.borderedProminent).tint(Theme.accent)
+                    if state.videoPicked {
+                        ContentUnavailableView {
+                            Label("Video ready", systemImage: "checkmark.circle")
+                        } actions: {
+                            Button("Choose face", action: actions.chooseFace).buttonStyle(.borderedProminent).tint(Theme.accent)
+                        }
+                    } else {
+                        ContentUnavailableView {
+                            Label("No video yet", systemImage: "film")
+                        } actions: {
+                            Button("Choose video", action: actions.chooseVideo).buttonStyle(.borderedProminent).tint(Theme.accent)
+                        }
                     }
                 }
                 if state.hasVideo {
