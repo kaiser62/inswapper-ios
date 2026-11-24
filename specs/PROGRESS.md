@@ -159,3 +159,7 @@ Both are review-only guidance; no commands/fetches/settings changes. Installed t
 - Verified: first saved face auto-picked once a video loads ("library face picked" in Logs); Fast 8-bit stayed on after update (badge "8-bit · Live", engine "swapper 8-bit strength 100"); 14.9 swaps/s in Live; 12 s clip exported with the 8-bit swapper in about 40 s (289 frames); export plays in Library > Exports with the swapped face; Exports player Close button works.
 - Not tested: Render ahead mode itself, landscape theater, haptics. Face is chosen only after a video loads (Face row reads "Choose" on an empty Player).
 - Advisor verdict (earlier this session): simulator-only checks are not device verification; Logs toolbar fixed for xxxLarge in dbf26bc.
+
+## 2026-11-24 Build 69 on device (commit 0dad7bd)
+- Verified on the phone: Export row has a gap above the floating tab bar; Saved faces sheet is themed (dark background, accent ring on the face thumbnail, themed Close); Logs toolbar one row at default size (Copy all / Share / Clear / "404 lines"), launch line reads "build 69".
+- Not re-tested this round: swapping, Render ahead, landscape theater, haptics. Landscape theater awaits a decision (needs orientations in project.yml).
