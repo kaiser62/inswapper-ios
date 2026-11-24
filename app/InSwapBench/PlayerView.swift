@@ -43,7 +43,7 @@ final class PlayerVM: ObservableObject {
         didSet { UserDefaults.standard.set(strength, forKey: "strength"); if strength != oldValue, engine != nil { prepare() } }
     }
     /// 8-bit palettized swapper (63 ms vs 149 ms on the phone). Off until compared by eye; needs swapper_pal8 imported.
-    @Published var fastSwapper: Bool = (UserDefaults.standard.object(forKey: "fastSwapper") as? Bool ?? true) && ModelStore.hasPal8 {   // default ON once installed (build 40 verified clean by the user)
+    @Published var fastSwapper: Bool = UserDefaults.standard.object(forKey: "fastSwapper") as? Bool ?? true {   // default ON once installed (build 40 verified clean by the user)
         didSet { UserDefaults.standard.set(fastSwapper, forKey: "fastSwapper"); if fastSwapper != oldValue, engine != nil { prepare() } }
     }
     var costText: String {
