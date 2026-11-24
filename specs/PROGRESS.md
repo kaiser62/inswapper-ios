@@ -163,3 +163,7 @@ Both are review-only guidance; no commands/fetches/settings changes. Installed t
 ## 2026-11-24 Build 69 on device (commit 0dad7bd)
 - Verified on the phone: Export row has a gap above the floating tab bar; Saved faces sheet is themed (dark background, accent ring on the face thumbnail, themed Close); Logs toolbar one row at default size (Copy all / Share / Clear / "404 lines"), launch line reads "build 69".
 - Not re-tested this round: swapping, Render ahead, landscape theater, haptics. Landscape theater awaits a decision (needs orientations in project.yml).
+
+## 2026-11-24 Build 70 on device (commit 7251950)
+- Verified on the phone: Library > Faces tiles (Face 1, Face 2) are equal squares regardless of photo proportions; Settings shows Build 70. Installed via LiveContainer replace-install.
+- Local builds: tools/ipa.sh builds the same unsigned IPA on the Mac (about 30 s); tools/ipa.sh -s serves it on the LAN for Install from URL. Local build number defaults to 9000.
