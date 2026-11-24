@@ -45,16 +45,17 @@ final class AppLog: ObservableObject, @unchecked Sendable {
 struct LogsView: View {
     @ObservedObject private var log = AppLog.shared
     @State private var copied = false
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
+                (typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))) {
                     Button(copied ? "Copied" : "Copy all") { UIPasteboard.general.string = log.text; copied = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false } }
                         .buttonStyle(CompactPrimaryButtonStyle())
                     ShareLink(item: log.text) { Label("Share", systemImage: "square.and.arrow.up") }.buttonStyle(CompactSoftButtonStyle())
                     Button("Clear", role: .destructive) { log.clear() }.buttonStyle(CompactSoftButtonStyle())
-                    Spacer()
+                    if !typeSize.isAccessibilitySize { Spacer() }
                     Text("\(log.text.split(separator: "\n").count) lines").font(.caption).foregroundStyle(.secondary)
                 }
                 ScrollViewReader { proxy in

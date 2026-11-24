@@ -42,6 +42,7 @@ struct ExportSheet: View {
                 Button { dismiss(); onStart() } label: { Text("Start export").frame(maxWidth: .infinity) }
                     .buttonStyle(PrimaryButtonStyle()).disabled(!enoughSpace)
                     .padding()
+                    .background(Theme.background)
             }
         }
         .presentationDetents([.large])
