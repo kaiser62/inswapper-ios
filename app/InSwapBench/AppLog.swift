@@ -51,9 +51,9 @@ struct LogsView: View {
                 HStack {
                     Button(copied ? "Copied" : "Copy all") { UIPasteboard.general.string = log.text; copied = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false } }
-                        .buttonStyle(.borderedProminent)
-                    ShareLink(item: log.text) { Label("Share", systemImage: "square.and.arrow.up") }.buttonStyle(.bordered)
-                    Button("Clear", role: .destructive) { log.clear() }.buttonStyle(.bordered)
+                        .buttonStyle(CompactPrimaryButtonStyle())
+                    ShareLink(item: log.text) { Label("Share", systemImage: "square.and.arrow.up") }.buttonStyle(CompactSoftButtonStyle())
+                    Button("Clear", role: .destructive) { log.clear() }.buttonStyle(CompactSoftButtonStyle())
                     Spacer()
                     Text("\(log.text.split(separator: "\n").count) lines").font(.caption).foregroundStyle(.secondary)
                 }

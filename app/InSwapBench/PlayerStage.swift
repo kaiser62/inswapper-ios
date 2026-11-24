@@ -29,6 +29,14 @@ struct PlayerStage<Video: View>: View {
                                     .background(.black.opacity(0.55), in: Capsule())
                             }
                             Spacer()
+                            Button(action: actions.toggleOverlay) {
+                                Label(state.overlay ? "Swap on" : "Swap off", systemImage: state.overlay ? "face.smiling.inverse" : "face.dashed")
+                                    .font(.footnote.bold()).padding(.horizontal, 10).frame(minHeight: Theme.hit)
+                                    .foregroundStyle(state.overlay ? Theme.accent : Theme.muted)
+                                    .background(.black.opacity(0.55), in: Capsule())
+                            }
+                            .accessibilityLabel("Face swap overlay")
+                            .accessibilityValue(state.overlay ? "On" : "Off")
                             Button(theater ? "Exit theater" : "Theater", systemImage: theater ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
                                 withAnimation(Theme.spring) { theater.toggle() }
                             }

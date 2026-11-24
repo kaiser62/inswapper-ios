@@ -95,19 +95,19 @@ struct ContentView: View {
                     .font(.subheadline)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
                     Button("Import models.zip") { picking = true }
-                        .buttonStyle(.borderedProminent).disabled(vm.busy)
+                        .buttonStyle(CompactPrimaryButtonStyle()).disabled(vm.busy)
                     Button("Run benchmark") { vm.runBench() }
-                        .buttonStyle(.bordered).disabled(vm.busy || !vm.installed)
+                        .buttonStyle(CompactSoftButtonStyle()).disabled(vm.busy || !vm.installed)
                     Button("Compare 8-bit swapper") { vm.run { log in await Bench.swapperCompare(log: log) } }
-                        .buttonStyle(.bordered).disabled(vm.busy || !vm.installed)
+                        .buttonStyle(CompactSoftButtonStyle()).disabled(vm.busy || !vm.installed)
                     Button("5 min FP16") { vm.run { log in await Bench.sustainedSwapper("swapper", seconds: 300, log: log) } }
-                        .buttonStyle(.bordered).disabled(vm.busy || !vm.installed)
+                        .buttonStyle(CompactSoftButtonStyle()).disabled(vm.busy || !vm.installed)
                     Button("5 min 8-bit") { vm.run { log in await Bench.sustainedSwapper("swapper_pal8", seconds: 300, log: log) } }
-                        .buttonStyle(.bordered).disabled(vm.busy || !vm.installed)
+                        .buttonStyle(CompactSoftButtonStyle()).disabled(vm.busy || !vm.installed)
                 }
                 Text("8-bit experiment: import swapper_pal8.zip with the same button. Let the phone cool for a few minutes between the two 5-minute runs.").font(.caption).foregroundStyle(.secondary)
                 Button("Copy results") { UIPasteboard.general.string = vm.output }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(CompactSoftButtonStyle())
                 ScrollView {
                     Text(vm.output)
                         .font(.system(.caption, design: .monospaced))

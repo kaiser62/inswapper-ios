@@ -235,17 +235,17 @@ struct PhotoView: View {
                     }
                     HStack {
                         PhotosPicker(selection: $srcItem, matching: .images) { Label("Source face", systemImage: "person.crop.square") }
-                            .buttonStyle(.bordered)
-                        Button { showFaces = true } label: { Label("Library", systemImage: "person.2") }.buttonStyle(.bordered)
+                            .buttonStyle(CompactSoftButtonStyle())
+                        Button { showFaces = true } label: { Label("Library", systemImage: "person.2") }.buttonStyle(CompactSoftButtonStyle())
                         PhotosPicker(selection: $tgtItems, maxSelectionCount: 12, matching: .images) { Label("Target photos", systemImage: "photo.stack") }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(CompactSoftButtonStyle())
                     }
                     .disabled(vm.busy || !installed)
                     if let s = vm.sourceImage {
                         Image(decorative: s, scale: 1).resizable().scaledToFit().frame(height: 110).clipShape(RoundedRectangle(cornerRadius: 8))
                     }
                     Button("Swap all (\(vm.jobs.filter { !$0.selected.isEmpty }.count))") { vm.swapAll() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(CompactPrimaryButtonStyle())
                         .disabled(vm.busy || vm.sourceImage == nil || vm.jobs.allSatisfy { $0.selected.isEmpty })
                     if !vm.jobs.isEmpty {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 6)], spacing: 6) {
@@ -262,7 +262,7 @@ struct PhotoView: View {
                             }
                         }
                         if vm.jobs.contains(where: { $0.resultURL != nil }) {
-                            Button("Save all to Photos") { vm.saveAllToPhotos() }.buttonStyle(.bordered)
+                            Button("Save all to Photos") { vm.saveAllToPhotos() }.buttonStyle(CompactSoftButtonStyle())
                         }
                     }
                     if vm.busy { ProgressView() }
@@ -350,7 +350,7 @@ struct ResultViewer: View {
                     Button { editing = true } label: {
                         Label(vm.jobs[index].faces.count > 1 ? "Edit faces (\(vm.jobs[index].faces.count) found)" : "Edit", systemImage: "face.dashed")
                     }
-                    .buttonStyle(.borderedProminent).padding(.bottom, 24)
+                    .buttonStyle(CompactPrimaryButtonStyle()).padding(.bottom, 24)
                 }
             }
         }
@@ -376,7 +376,7 @@ struct FaceEditSheet: View {
                                 let kx = CGFloat(job.preview.width) / CGFloat(job.width)
                                 ForEach(job.faces.indices, id: \.self) { i in
                                     let f = job.faces[i]
-                                    Rectangle().stroke(job.selected.contains(i) ? Color.green : Color.white.opacity(0.8), lineWidth: 3)
+                                    Rectangle().stroke(job.selected.contains(i) ? Theme.good : Color.white.opacity(0.8), lineWidth: 3)
                                         .contentShape(Rectangle())
                                         .onTapGesture { vm.toggle(jobID, face: i) }
                                         .frame(width: (f.x2 - f.x1) * kx * k, height: (f.y2 - f.y1) * kx * k)
@@ -397,7 +397,7 @@ struct FaceEditSheet: View {
                             }
                         }
                         Button("Re-swap this photo") { vm.reswap(jobID); dismiss() }
-                            .buttonStyle(.borderedProminent).disabled(job.selected.isEmpty || vm.busy)
+                            .buttonStyle(CompactPrimaryButtonStyle()).disabled(job.selected.isEmpty || vm.busy)
                     }
                     .padding()
                 }

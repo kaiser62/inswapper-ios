@@ -150,3 +150,5 @@ Both are review-only guidance; no commands/fetches/settings changes. Installed t
 - Step 3 (VisoSwap /mobile port, spec from read-only agent of kaiser62/visoswap frontend/src/mobile): palette bg #090c0f card #11171c raised #182129 line #293640 accent #32bbd0 active #153b43 good #5dcc8b bad #ef7265.
   - 3a: tokens, card(), Segmented, button styles (pushed). 3b: Player -> Studio (transport row, face card, status pill). Later: Faces grid with ring/check, Takes list over Documents/Exports (also prunes), tab naming decision.
   - Dropped on purpose: Start/Stop/Force Stop, Interval mode, Projects, 200+ Controls, Queue, "Resolution" labels (misleading). Overlay ON/OFF is a separate non-view-only commit.
+- 3c (builds 52-53): theater mode + seek bar below video, Takes (Exports segment), Faces tiles, app icon (placeholder rings).
+- 3d: overlay on/off toggle (display only: PlayerEngine.overlayOn gates patches(at:); export untouched), compact teal button styles on Photo/Logs/Bench, Settings rows themed.

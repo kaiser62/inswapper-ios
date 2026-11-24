@@ -27,6 +27,7 @@ struct SettingsView: View {
                     LabeledContent("Build", value: PlayerVM.build)
                 }
             }
+            .listRowBackground(Theme.surface)
             .scrollContentBackground(.hidden)
             .background(Theme.background)
             .navigationTitle("Settings")

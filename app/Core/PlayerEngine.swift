@@ -19,7 +19,7 @@ final class PlayerEngine {
     private let cacheDirectory: URL?
     var cacheDirectoryURL: URL? { cacheDirectory }
     private let lock = NSLock()
-    private var _mode = PlayMode.livePreview, _combo = false, _paused = false
+    private var _mode = PlayMode.livePreview, _combo = false, _paused = false, _overlay = true
     private var renderToken = CancelToken(), liveToken = CancelToken()
     private let renderQueue = DispatchQueue(label: "engine.render", qos: .userInitiated)
     private let liveQueue = DispatchQueue(label: "engine.live", qos: .userInitiated)
@@ -183,7 +183,13 @@ final class PlayerEngine {
     }
 
     /// Patches to paste on the frame shown at `time` (seconds).
+    /// Overlay off = show the original frames (A/B compare). Display only: export and the workers are unaffected.
+    var overlayOn: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _overlay }
+        set { lock.lock(); _overlay = newValue; lock.unlock() }
+    }
     func patches(at time: Double) -> [SwapPatch] {
+        guard overlayOn else { return [] }
         let us = PatchStore.us(time)
         switch mode {
         case .renderAhead:

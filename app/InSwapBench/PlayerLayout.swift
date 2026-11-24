@@ -13,6 +13,7 @@ struct PlayerLayoutState {
     var face: CGImage?
     var status = ""
     var busy = false
+    var overlay = true
 }
 
 struct PlayerLayoutActions {
@@ -21,6 +22,7 @@ struct PlayerLayoutActions {
     var togglePlay: () -> Void = {}
     var export: () -> Void = {}
     var settings: () -> Void = {}
+    var toggleOverlay: () -> Void = {}
     var scrub: (Double) -> Void = { _ in }
     var scrubStart: () -> Void = {}
     var scrubEnd: () -> Void = {}

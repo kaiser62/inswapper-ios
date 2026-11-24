@@ -19,7 +19,7 @@ struct ExportProgressView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground))
+        .background(Theme.background)
         .interactiveDismissDisabled()
         .confirmationDialog("Cancel export?", isPresented: $confirmCancel, titleVisibility: .visible) {
             Button("Cancel export", role: .destructive) { session.cancel() }
@@ -55,7 +55,7 @@ struct ExportProgressView: View {
 
     private func finished(_ url: URL) -> some View {
         VStack(spacing: 16) {
-            Image(systemName: "checkmark.circle.fill").font(.system(size: 56)).foregroundStyle(.green).accessibilityHidden(true)
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 56)).foregroundStyle(Theme.good).accessibilityHidden(true)
             Text("Export finished").font(.title2.bold())
             Text(url.lastPathComponent).font(.footnote).foregroundStyle(.secondary)
             Button { session.saveToPhotos(url) } label: { Label("Save to Photos", systemImage: "square.and.arrow.down").frame(maxWidth: .infinity) }
