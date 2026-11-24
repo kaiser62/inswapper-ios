@@ -23,7 +23,7 @@ struct TakesView: View {
         }
         .onAppear(perform: reload)
         .sheet(item: $playing) { t in
-            TakePlayer(url: t.url).themed()
+            TakePlayer(url: t.url).themed().presentationDragIndicator(.visible)
         }
         .sheet(item: $sharing) { ShareSheet(url: $0) }
         .confirmationDialog("Delete this video?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
@@ -59,14 +59,23 @@ struct TakesView: View {
     }
 }
 
-/// Holds its AVPlayer in state so it is not recreated on every redraw; plays on appear, stops on disappear.
+/// Holds its AVPlayer in state so it is not recreated on every redraw; has its own Close button (the system player has none in a sheet).
 private struct TakePlayer: View {
     let url: URL
     @State private var player: AVPlayer?
+    @Environment(\.dismiss) private var dismiss
     var body: some View {
-        VideoPlayer(player: player)
-            .ignoresSafeArea()
-            .onAppear { let p = AVPlayer(url: url); player = p; p.play() }
-            .onDisappear { player?.pause(); player = nil }
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
+            VideoPlayer(player: player)
+            Button("Close", systemImage: "xmark") { dismiss() }
+                .labelStyle(.iconOnly).font(.body.bold())
+                .foregroundStyle(.white)
+                .frame(width: Theme.hit, height: Theme.hit)
+                .background(.black.opacity(0.55), in: Circle())
+                .padding(Theme.gap)
+        }
+        .onAppear { let p = AVPlayer(url: url); player = p; p.play() }
+        .onDisappear { player?.pause(); player = nil }
     }
 }
