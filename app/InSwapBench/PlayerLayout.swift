@@ -102,5 +102,6 @@ struct PlayerLayout<Video: View>: View {
                     .buttonStyle(SoftButtonStyle())
             }
             .padding(.horizontal, Theme.pad)
+            .padding(.bottom, Theme.gap)   // keeps the row clear of the floating tab bar
     }
 }
