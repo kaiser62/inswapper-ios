@@ -43,7 +43,12 @@ final class PlayerVM: ObservableObject {
         didSet { UserDefaults.standard.set(strength, forKey: "strength"); if strength != oldValue, engine != nil { prepare() } }
     }
     /// 8-bit palettized swapper (63 ms vs 149 ms on the phone). Off until compared by eye; needs swapper_pal8 imported.
-    @Published var fastSwapper: Bool = UserDefaults.standard.object(forKey: "fastSwapper") as? Bool ?? true {   // default ON once installed (build 40 verified clean by the user)
+    @Published var fastSwapper: Bool = {
+        let d = UserDefaults.standard
+        // One-time reset: builds before 64 could save "off" just because pal8 was not installed yet.
+        if !d.bool(forKey: "fastSwapperReset64") { d.set(true, forKey: "fastSwapperReset64"); d.set(true, forKey: "fastSwapper") }
+        return d.object(forKey: "fastSwapper") as? Bool ?? true
+    }() {   // default ON once installed (build 40 verified clean by the user)
         didSet { UserDefaults.standard.set(fastSwapper, forKey: "fastSwapper"); if fastSwapper != oldValue, engine != nil { prepare() } }
     }
     var costText: String {
@@ -121,6 +126,9 @@ final class PlayerVM: ObservableObject {
     private func prepare() {
         guard let url = videoURL else { return }
         videoPicked = true
+        if sourceLatent == nil, !triedDefaultFace, let first = FaceStore.shared.entries.first {   // default to the first saved face
+            triedDefaultFace = true; setLibraryFace(first); return
+        }
         guard let latent = sourceLatent else { status = "Video ready. Now pick a source face (photo or Library)."; return }
         if busy { needsPrepare = true; return }   // a pick made while loading is applied when this finishes
         busy = true
@@ -218,6 +226,7 @@ final class PlayerVM: ObservableObject {
     func endExport() { showExportProgress = false; export.reset(); prepare() }
 
     func setActive(_ a: Bool) { active = a; export.setActive(a); applyWork() }
+    private var triedDefaultFace = false
     private var loadedPal8: Bool?   // which swapper the current engine was built with
     func setVisible(_ v: Bool) {
         visible = v; applyWork()
